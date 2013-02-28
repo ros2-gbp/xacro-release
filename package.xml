@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package>
   <name>xacro</name>
-  <version>1.7.1</version>
+  <version>1.7.2</version>
   <description>Xacro (XML Macros)
 
     Xacro is an XML macro language. With xacro, you can construct shorter and more readable XML files by using macros that expand to larger XML expressions.
@@ -19,7 +19,6 @@
 
   <buildtool_depend>catkin</buildtool_depend>
 
-  <build_depend>roslaunch</build_depend>
   <run_depend>roslaunch</run_depend>
 
   <test_depend>rostest</test_depend>
