@@ -194,6 +194,12 @@ def child_elements(elt):
 
 all_includes = []
 
+# Deprecated message for <include> tags that don't have <xacro:include> prepended:
+deprecated_include_msg = """DEPRECATED IN HYDRO:
+  The <include> tag should be prepended with 'xacro' if that is the intended use 
+  of it, such as <xacro:include ...>. Use the following script to fix incorrect
+  xacro includes:
+     sed -i 's/<include/<xacro:include/g' `find . -iname *.xacro`"""
 
 ## @throws XacroException if a parsing error occurs with an included document
 def process_includes(doc, base_dir):
@@ -201,7 +207,29 @@ def process_includes(doc, base_dir):
     previous = doc.documentElement
     elt = next_element(previous)
     while elt:
-        if elt.tagName == 'include' or elt.tagName == 'xacro:include':
+        # Xacro should not use plain 'include' tags but only namespaced ones. Causes conflicts with
+        # other XML elements including Gazebo's <gazebo> extensions
+        is_include = False
+        if elt.tagName == 'xacro:include' or elt.tagName == 'include': 
+
+            is_include = True
+            # Temporary fix for ROS Hydro and the xacro include scope problem
+            if elt.tagName == 'include':
+
+                # check if there is any element within the <include> tag. mostly we are concerned 
+                # with Gazebo's <uri> element, but it could be anything. also, make sure the child
+                # nodes aren't just a single Text node, which is still considered a deprecated 
+                # instance
+                if elt.childNodes and not (len(elt.childNodes) == 1 and 
+                                           elt.childNodes[0].nodeType == elt.TEXT_NODE):
+                    # this is not intended to be a xacro element, so we can ignore it
+                    is_include = False
+                else:
+                    # throw a deprecated warning
+                    print(deprecated_include_msg, file=sys.stderr)
+
+        # Process current element depending on previous conditions
+        if is_include:
             filename = eval_text(elt.getAttribute('filename'), {})
             if not os.path.isabs(filename):
                 filename = os.path.join(base_dir, filename)
@@ -504,6 +532,26 @@ def eval_all(root, macros, symbols):
                     raise XacroException("Block \"%s\" was never declared" % name)
 
                 node = None
+            elif node.tagName == 'if' or node.tagName == 'xacro:if':
+                value = eval_text(node.getAttribute('value'), symbols)
+                if value == 1 or value == 'true':
+                    for e in list(child_elements(node)):
+                        cloned = node.cloneNode(deep = True)
+                        eval_all(cloned, macros, symbols)
+                        node.parentNode.insertBefore(e, node)
+                elif value != 0 and value != 'false':
+                    raise XacroException("Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]" % value)
+                node.parentNode.removeChild(node)
+            elif node.tagName == 'unless' or node.tagName == 'xacro:unless':
+                value = eval_text(node.getAttribute('value'), symbols)
+                if value == 0 or value == 'false':
+                    for e in list(child_elements(node)):
+                        cloned = node.cloneNode(deep = True)
+                        eval_all(cloned, macros, symbols)
+                        node.parentNode.insertBefore(e, node)
+                elif value != 1 and value != 'true':
+                    raise XacroException("Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]" % value)
+                node.parentNode.removeChild(node)
             else:
                 # Evals the attributes
                 for at in node.attributes.items():
@@ -579,7 +627,7 @@ def main():
     finally:
         f.close()
 
-    process_includes(doc, os.path.dirname(sys.argv[1]))
+    process_includes(doc, os.path.dirname(args[0]))
     if just_deps:
         for inc in all_includes:
             sys.stdout.write(inc + " ")
