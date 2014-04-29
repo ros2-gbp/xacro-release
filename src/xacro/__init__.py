@@ -1,5 +1,5 @@
-#! /usr/bin/env python
 # Copyright (c) 2013, Willow Garage, Inc.
+# Copyright (c) 2014, Open Source Robotics Foundation, Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -10,9 +10,10 @@
 #     * Redistributions in binary form must reproduce the above copyright
 #       notice, this list of conditions and the following disclaimer in the
 #       documentation and/or other materials provided with the distribution.
-#     * Neither the name of the Willow Garage, Inc. nor the names of its
-#       contributors may be used to endorse or promote products derived from
-#       this software without specific prior written permission.
+#     * Neither the name of the Open Source Robotics Foundation, Inc.
+#       nor the names of its contributors may be used to endorse or promote
+#       products derived from this software without specific prior
+#       written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -27,11 +28,12 @@
 # POSSIBILITY OF SUCH DAMAGE.
 
 # Author: Stuart Glaser
-# Maintainer: William Woodall <wwoodall@willowgarage.com>
+# Maintainer: William Woodall <william@osrfoundation.org>
 
 from __future__ import print_function
 
 import getopt
+import glob
 import os
 import re
 import string
@@ -43,8 +45,14 @@ from xml.dom.minidom import parse
 from roslaunch import substitution_args
 from rosgraph.names import load_mappings
 
+try:
+    _basestr = basestring
+except NameError:
+    _basestr = str
+
 # Dictionary of subtitution args
 substitution_args_context = {}
+
 
 class XacroException(Exception):
     pass
@@ -57,6 +65,7 @@ def isnumber(x):
 def eval_extension(str):
     return substitution_args.resolve_args(str, context=substitution_args_context, resolve_anon=False)
 
+
 # Better pretty printing of xml
 # Taken from http://ronrothman.com/public/leftbraned/xml-dom-minidom-toprettyxml-and-silly-whitespace/
 def fixed_writexml(self, writer, indent="", addindent="", newl=""):
@@ -66,7 +75,7 @@ def fixed_writexml(self, writer, indent="", addindent="", newl=""):
     writer.write(indent + "<" + self.tagName)
 
     attrs = self._get_attributes()
-    a_names = attrs.keys()
+    a_names = list(attrs.keys())
     a_names.sort()
 
     for a_name in a_names:
@@ -75,7 +84,7 @@ def fixed_writexml(self, writer, indent="", addindent="", newl=""):
         writer.write("\"")
     if self.childNodes:
         if len(self.childNodes) == 1 \
-          and self.childNodes[0].nodeType == xml.dom.minidom.Node.TEXT_NODE:
+           and self.childNodes[0].nodeType == xml.dom.minidom.Node.TEXT_NODE:
             writer.write(">")
             self.childNodes[0].writexml(writer, "", "", "")
             writer.write("</%s>%s" % (self.tagName, newl))
@@ -196,10 +205,13 @@ all_includes = []
 
 # Deprecated message for <include> tags that don't have <xacro:include> prepended:
 deprecated_include_msg = """DEPRECATED IN HYDRO:
-  The <include> tag should be prepended with 'xacro' if that is the intended use 
+  The <include> tag should be prepended with 'xacro' if that is the intended use
   of it, such as <xacro:include ...>. Use the following script to fix incorrect
   xacro includes:
      sed -i 's/<include/<xacro:include/g' `find . -iname *.xacro`"""
+
+include_no_matches_msg = """Include tag filename spec \"{}\" matched no files."""
+
 
 ## @throws XacroException if a parsing error occurs with an included document
 def process_includes(doc, base_dir):
@@ -210,17 +222,17 @@ def process_includes(doc, base_dir):
         # Xacro should not use plain 'include' tags but only namespaced ones. Causes conflicts with
         # other XML elements including Gazebo's <gazebo> extensions
         is_include = False
-        if elt.tagName == 'xacro:include' or elt.tagName == 'include': 
+        if elt.tagName == 'xacro:include' or elt.tagName == 'include':
 
             is_include = True
             # Temporary fix for ROS Hydro and the xacro include scope problem
             if elt.tagName == 'include':
 
-                # check if there is any element within the <include> tag. mostly we are concerned 
+                # check if there is any element within the <include> tag. mostly we are concerned
                 # with Gazebo's <uri> element, but it could be anything. also, make sure the child
-                # nodes aren't just a single Text node, which is still considered a deprecated 
+                # nodes aren't just a single Text node, which is still considered a deprecated
                 # instance
-                if elt.childNodes and not (len(elt.childNodes) == 1 and 
+                if elt.childNodes and not (len(elt.childNodes) == 1 and
                                            elt.childNodes[0].nodeType == elt.TEXT_NODE):
                     # this is not intended to be a xacro element, so we can ignore it
                     is_include = False
@@ -230,36 +242,44 @@ def process_includes(doc, base_dir):
 
         # Process current element depending on previous conditions
         if is_include:
-            filename = eval_text(elt.getAttribute('filename'), {})
-            if not os.path.isabs(filename):
-                filename = os.path.join(base_dir, filename)
-            f = None
-            try:
-                try:
-                    f = open(filename)
-                except IOError, e:
-                    print(elt)
-                    raise XacroException("included file \"%s\" could not be opened: %s" % (filename, str(e)))
-                try:
-                    global all_includes
-                    all_includes.append(filename)
-                    included = parse(f)
-                except Exception, e:
-                    raise XacroException("included file [%s] generated an error during XML parsing: %s" % (filename, str(e)))
-            finally:
-                if f:
-                    f.close()
+            filename_spec = eval_text(elt.getAttribute('filename'), {})
+            if not os.path.isabs(filename_spec):
+                filename_spec = os.path.join(base_dir, filename_spec)
 
-            # Replaces the include tag with the elements of the included file
-            for c in child_elements(included.documentElement):
-                elt.parentNode.insertBefore(c.cloneNode(1), elt)
+            if re.search('[*[?]+', filename_spec):
+                # Globbing behaviour
+                filenames = sorted(glob.glob(filename_spec))
+                if len(filenames) == 0:
+                    print(include_no_matches_msg.format(filename_spec), file=sys.stderr)
+            else:
+                # Default behaviour
+                filenames = [filename_spec]
+
+            for filename in filenames:
+                global all_includes
+                all_includes.append(filename)
+                try:
+                    with open(filename) as f:
+                        try:
+                            included = parse(f)
+                        except Exception as e:
+                            raise XacroException(
+                                "included file \"%s\" generated an error during XML parsing: %s"
+                                % (filename, str(e)))
+                except IOError as e:
+                    raise XacroException("included file \"%s\" could not be opened: %s" % (filename, str(e)))
+
+                # Replaces the include tag with the elements of the included file
+                for c in child_elements(included.documentElement):
+                    elt.parentNode.insertBefore(c.cloneNode(1), elt)
+
+                # Grabs all the declared namespaces of the included document
+                for name, value in included.documentElement.attributes.items():
+                    if name.startswith('xmlns:'):
+                        namespaces[name] = value
+
             elt.parentNode.removeChild(elt)
             elt = None
-
-            # Grabs all the declared namespaces of the included document
-            for name, value in included.documentElement.attributes.items():
-                if name.startswith('xmlns:'):
-                    namespaces[name] = value
         else:
             previous = elt
 
@@ -343,11 +363,9 @@ def eval_lit(lex, symbols):
     if lex.peek()[0] == lex.SYMBOL:
         try:
             value = symbols[lex.next()[1]]
-        except KeyError, ex:
-            #sys.stderr.write("Could not find symbol: %s\n" % str(ex))
+        except KeyError as ex:
             raise XacroException("Property wasn't defined: %s" % str(ex))
-        if not (isnumber(value) or isinstance(value, (str, unicode))):
-            print [value], isinstance(value, str), type(value)
+        if not (isnumber(value) or isinstance(value, _basestr)):
             raise XacroException("WTF2")
         try:
             return int(value)
@@ -482,8 +500,8 @@ def eval_all(root, macros, symbols):
                 scoped = Table(symbols)
                 for name, value in node.attributes.items():
                     if not name in params:
-                        raise XacroException("Invalid parameter \"%s\" while expanding macro \"%s\"" % \
-                            (str(name), str(node.tagName)))
+                        raise XacroException("Invalid parameter \"%s\" while expanding macro \"%s\"" %
+                                             (str(name), str(node.tagName)))
                     params.remove(name)
                     scoped[name] = eval_text(value, symbols)
 
@@ -502,8 +520,8 @@ def eval_all(root, macros, symbols):
                         block = block.nextSibling
 
                 if params:
-                    raise XacroException("Some parameters were not set for macro %s" % \
-                        str(node.tagName))
+                    raise XacroException("Some parameters were not set for macro %s" %
+                                         str(node.tagName))
                 eval_all(body, macros, scoped)
 
                 # Replaces the macro node with the expansion
@@ -534,23 +552,31 @@ def eval_all(root, macros, symbols):
                 node = None
             elif node.tagName == 'if' or node.tagName == 'xacro:if':
                 value = eval_text(node.getAttribute('value'), symbols)
+                try:
+                    value = int(float(value))
+                except ValueError:
+                    pass
                 if value == 1 or value == 'true':
                     for e in list(child_elements(node)):
-                        cloned = node.cloneNode(deep = True)
+                        cloned = node.cloneNode(deep=True)
                         eval_all(cloned, macros, symbols)
                         node.parentNode.insertBefore(e, node)
                 elif value != 0 and value != 'false':
-                    raise XacroException("Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]" % value)
+                    raise XacroException("""\
+Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]\
+""" % value)
                 node.parentNode.removeChild(node)
             elif node.tagName == 'unless' or node.tagName == 'xacro:unless':
                 value = eval_text(node.getAttribute('value'), symbols)
                 if value == 0 or value == 'false':
                     for e in list(child_elements(node)):
-                        cloned = node.cloneNode(deep = True)
+                        cloned = node.cloneNode(deep=True)
                         eval_all(cloned, macros, symbols)
                         node.parentNode.insertBefore(e, node)
                 elif value != 1 and value != 'true':
-                    raise XacroException("Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]" % value)
+                    raise XacroException("""\
+Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]\
+""" % value)
                 node.parentNode.removeChild(node)
             else:
                 # Evals the attributes
@@ -581,14 +607,15 @@ def print_usage(exit_code=0):
     print("       %s --includes   Only evalutes includes" % 'xacro.py')
     sys.exit(exit_code)
 
-def set_substitution_args_context(context = {}):
+
+def set_substitution_args_context(context={}):
     substitution_args_context['arg'] = context
 
 
 def main():
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], "ho:", ['deps', 'includes'])
-    except getopt.GetoptError, err:
+    except getopt.GetoptError as err:
         print(str(err))
         print_usage(2)
 
@@ -634,7 +661,7 @@ def main():
         sys.stdout.write("\n")
     elif just_includes:
         doc.writexml(output)
-        print
+        print()
     else:
         eval_self_contained(doc)
         banner = [xml.dom.minidom.Comment(c) for c in
@@ -647,5 +674,4 @@ def main():
             doc.insertBefore(comment, first)
 
         output.write(doc.toprettyxml(indent='  '))
-        #doc.writexml(output, newl = "\n")
-        print
+        print()
