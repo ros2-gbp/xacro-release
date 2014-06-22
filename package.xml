@@ -1,13 +1,13 @@
 <?xml version="1.0"?>
 <package>
   <name>xacro</name>
-  <version>1.8.6</version>
+  <version>1.9.1</version>
   <description>Xacro (XML Macros)
 
     Xacro is an XML macro language. With xacro, you can construct shorter and more readable XML files by using macros that expand to larger XML expressions.
   </description>
 
-  <maintainer email="wwoodall@willowgarage.com">William Woodall</maintainer>
+  <maintainer email="morgan@osrfoundation.org">Morgan "codebot" Quigley</maintainer>
 
   <license>BSD</license>
 
@@ -16,6 +16,7 @@
   <url type="bugtracker">https://github.com/ros/xacro/issues</url>
 
   <author>Stuart Glaser</author>
+  <author>William Woodall</author>
 
   <buildtool_depend version_gte="0.5.68">catkin</buildtool_depend>
 
@@ -25,4 +26,7 @@
 
   <test_depend>rostest</test_depend>
 
+  <export>
+    <architecture_independent/>
+  </export>
 </package>

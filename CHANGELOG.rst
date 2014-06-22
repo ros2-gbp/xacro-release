@@ -2,20 +2,20 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1.8.6 (2014-06-21)
+1.9.1 (2014-06-21)
 ------------------
-* fix tests file so they run properly
-* Contributors: Michael Ferguson
+* fixup tests so they run
+* export architecture_independent flag in package.xml
+* installed relocatable fix
+* Contributors: Michael Ferguson, Mike Purvis, Scott K Logan
 
-1.8.5 (2014-04-29)
+1.9.0 (2014-03-28)
 ------------------
-* Installed xacro relocatable fix.
 * Remove the roslint_python glob, use the default one.
 * Add roslint target to xacro; two whitespace fixes so that it passes.
 * fix evaluation of integers in if statements
   also added a unit test, fixes `#15 <https://github.com/ros/xacro/issues/15>`_
-* fix setting of _xacro_py CMake var
-  Fixes `#16 <https://github.com/ros/xacro/issues/16>`_
+* fix setting of _xacro_py CMake var, fixes `#16 <https://github.com/ros/xacro/issues/16>`_
 * Add support for globbing multiple files in a single <xacro:include>
 * code cleanup and python3 support
 * check for CATKIN_ENABLE_TESTING
@@ -30,6 +30,8 @@ Changelog for package xacro
 * Created check for Gazebo's <uri> tabs only only shows deprecated warnings if not present.
 * Small spelling fix
 * Xacro should not use plain 'include' tags but only namespaced ones.
+* Merge pull request `#8 <https://github.com/ros/xacro/issues/8>`_ from piyushk/hydro-devel-conditional
+  xacro conditional blocks
 * using refined arguments instead of sys.argv for xml file location
 * adding conditional blocks to xacro
 
@@ -83,4 +85,3 @@ Changelog for package xacro
 * Made the tests in xacro run again.
 * Created xacro/src
 * migration part 1
-* Contributors: Aaron Blasdel, Brian Gerkey, Jon Binney, Jonathan Bohren, Ken Conley, Kevin Watts, Rob Wheeler, Stu Glaser, Tully Foote, William Woodall
