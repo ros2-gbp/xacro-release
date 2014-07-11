@@ -1,3 +1,22 @@
+## xacro (indigo) - 1.9.2-0
+
+The packages in the `xacro` repository were released into the `indigo` distro by running `/usr/bin/bloom-release xacro --track indigo --rosdistro indigo` on `Fri, 11 Jul 2014 18:49:03 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+- rosdistro version: `1.9.1-0`
+- old version: `1.9.1-0`
+- new version: `1.9.2-0`
+
+Versions of tools used:
+- bloom version: `0.5.10`
+- catkin_pkg version: `0.2.3`
+- rosdep version: `0.10.25`
+- rosdistro version: `0.3.4`
+- vcstools version: `0.1.31`
+
+
 ## xacro (indigo) - 1.9.1-0
 
 The packages in the `xacro` repository were released into the `indigo` distro by running `/usr/bin/bloom-release xacro --track indigo --rosdistro indigo` on `Sun, 22 Jun 2014 04:53:19 -0000`
