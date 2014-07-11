@@ -139,7 +139,7 @@ class TestXacro(unittest.TestCase):
         self.assertTrue(
             xml_matches(
                 quick_xacro('''<a><f v="$(find xacro)/test/test_xacro.py" /></a>'''),
-                '''<a><f v="''' + os.path.abspath(__file__) + '''" /></a>'''))
+                '''<a><f v="''' + os.path.abspath((__file__).replace(".pyc",".py")) + '''" /></a>'''))
 
     def test_substitution_args_arg(self):
         set_substitution_args_context(load_mappings(['sub_arg:=my_arg']))
@@ -248,29 +248,158 @@ class TestXacro(unittest.TestCase):
         self.assertRaises(xacro.XacroException,
                           xacro.process_includes, doc, os.path.dirname(os.path.realpath(__file__)))
 
-    def test_numeric_if_statement(self):
-        doc = parseString('''\
-<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:if value="${3*0}"/>
-  <xacro:if value="0"/>
-  <xacro:if value="1"/>
-</robot>''')
-        quick_xacro(doc)
+    def test_boolean_if_statement(self):
         self.assertTrue(
             xml_matches(
                 quick_xacro('''\
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:if value="${3*0}">
+  <xacro:if value="false">
+    <a />
+  </xacro:if>
+  <xacro:if value="true">
+    <b />
+  </xacro:if>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <b />
+</robot>'''))      
+
+    def test_integer_if_statement(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:if value="${0*42}">
     <a />
   </xacro:if>
   <xacro:if value="0">
     <b />
   </xacro:if>
-  <xacro:if value="1">
+  <xacro:if value="${0}">
     <c />
+  </xacro:if>
+  <xacro:if value="${1*2+3}">
+    <d />
   </xacro:if>
 </robot>'''),
                 '''\
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-    <c />
+    <d />
+</robot>'''))      
+
+    def test_float_if_statement(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:if value="${3*0.0}">
+    <a />
+  </xacro:if>
+  <xacro:if value="${3*0.1}">
+    <b />
+  </xacro:if>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <b />
 </robot>'''))
+
+    def test_recursive_evaluation(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="a" value="42"/>
+  <xacro:property name="a2" value="${2*a}"/>
+  <a doubled="${a2}"/>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <a doubled="84"/>
+</robot>'''))
+
+    def test_recursive_definition(self):
+        self.assertRaises(xacro.XacroException,
+                          quick_xacro, '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="a" value="${a2}"/>
+  <xacro:property name="a2" value="${2*a}"/>
+  <a doubled="${a2}"/>
+</robot>''')
+
+    def test_multiple_recursive_evaluation(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="a" value="1"/>
+  <xacro:property name="b" value="2"/>
+  <xacro:property name="c" value="3"/>
+  <xacro:property name="product" value="${a*b*c}"/>
+  <answer product="${product}"/>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <answer product="6"/>
+</robot>'''))
+
+    def test_transitive_evaluation(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="a" value="42"/>
+  <xacro:property name="b" value="${a}"/>
+  <xacro:property name="c" value="${b}"/>
+  <xacro:property name="d" value="${c}"/>
+  <answer d="${d}"/>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <answer d="42"/>
+</robot>'''))
+
+    def test_multi_tree_evaluation(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="a" value="42"/>
+  <xacro:property name="b" value="2.1"/>
+  <xacro:property name="c" value="${a}"/>
+  <xacro:property name="d" value="${b}"/>
+  <xacro:property name="e" value="${c*d}"/>
+  <answer e="${e}"/>
+</robot>'''), 
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <answer e="88.2"/>
+</robot>'''))
+
+    def test_from_issue(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="x" value="42"/>
+  <xacro:property name="wheel_width" value="${x}"/>
+  <link name="my_link">
+    <origin xyz="0 0 ${wheel_width/2}"/>
+  </link>
+</robot>'''), 
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <link name="my_link">
+    <origin xyz="0 0 21.0"/>
+  </link>
+</robot>'''))
+
+    def test_recursive_bad_math(self):
+        self.assertRaises(ZeroDivisionError,
+            quick_xacro, '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="x" value="0"/>
+  <tag badness="${1/x}"/>
+</robot>''')
+
