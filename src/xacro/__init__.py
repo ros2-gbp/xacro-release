@@ -362,10 +362,13 @@ def eval_lit(lex, symbols):
         return float(lex.next()[1])
     if lex.peek()[0] == lex.SYMBOL:
         try:
-            value = symbols[lex.next()[1]]
+            key = lex.next()[1]
+            value = symbols[key]
         except KeyError as ex:
             raise XacroException("Property wasn't defined: %s" % str(ex))
         if not (isnumber(value) or isinstance(value, _basestr)):
+            if value is None:
+                raise XacroException("Property %s recursively used" % key)
             raise XacroException("WTF2")
         try:
             return int(value)
@@ -373,7 +376,12 @@ def eval_lit(lex, symbols):
             try:
                 return float(value)
             except:
-                return value
+                # prevent infinite recursion
+                symbols[key] = None
+                result = eval_text(value, symbols)
+                # restore old entry
+                symbols[key] = value
+                return result
     raise XacroException("Bad literal")
 
 
@@ -520,8 +528,8 @@ def eval_all(root, macros, symbols):
                         block = block.nextSibling
 
                 if params:
-                    raise XacroException("Some parameters were not set for macro %s" %
-                                         str(node.tagName))
+                    raise XacroException("Parameters [%s] were not set for macro %s" %
+                                         (",".join(params), str(node.tagName)))
                 eval_all(body, macros, scoped)
 
                 # Replaces the macro node with the expansion
@@ -550,33 +558,21 @@ def eval_all(root, macros, symbols):
                     raise XacroException("Block \"%s\" was never declared" % name)
 
                 node = None
-            elif node.tagName == 'if' or node.tagName == 'xacro:if':
+            elif node.tagName in ['if', 'xacro:if', 'unless', 'xacro:unless']:
                 value = eval_text(node.getAttribute('value'), symbols)
-                try:
-                    value = int(float(value))
+                try: 
+                    if value == 'true': keep = True
+                    elif value == 'false': keep = False
+                    else: keep = float(value)
                 except ValueError:
-                    pass
-                if value == 1 or value == 'true':
+                    raise XacroException("Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]" % value)
+                if node.tagName in ['unless', 'xacro:unless']: keep = not keep
+                if keep:
                     for e in list(child_elements(node)):
                         cloned = node.cloneNode(deep=True)
                         eval_all(cloned, macros, symbols)
                         node.parentNode.insertBefore(e, node)
-                elif value != 0 and value != 'false':
-                    raise XacroException("""\
-Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]\
-""" % value)
-                node.parentNode.removeChild(node)
-            elif node.tagName == 'unless' or node.tagName == 'xacro:unless':
-                value = eval_text(node.getAttribute('value'), symbols)
-                if value == 0 or value == 'false':
-                    for e in list(child_elements(node)):
-                        cloned = node.cloneNode(deep=True)
-                        eval_all(cloned, macros, symbols)
-                        node.parentNode.insertBefore(e, node)
-                elif value != 1 and value != 'true':
-                    raise XacroException("""\
-Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]\
-""" % value)
+
                 node.parentNode.removeChild(node)
             else:
                 # Evals the attributes
