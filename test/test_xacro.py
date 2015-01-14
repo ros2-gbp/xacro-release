@@ -8,6 +8,8 @@ import xacro
 from xml.dom.minidom import parseString
 import xml.dom
 import os.path
+import tempfile
+import subprocess
 from rosgraph.names import load_mappings
 from xacro import set_substitution_args_context
 
@@ -403,3 +405,135 @@ class TestXacro(unittest.TestCase):
   <tag badness="${1/x}"/>
 </robot>''')
 
+    def test_pr2(self):
+        # run xacro on the pr2 tree snapshot
+        proc = subprocess.Popen(['python','../xacro.py','robots/pr2/pr2.urdf.xacro'],
+                                stdout=subprocess.PIPE)
+        output, errcode = proc.communicate()
+        if errcode:
+            raise Exception("xacro couldn't process the pr2 snapshot test case")
+        self.assertTrue(
+            xml_matches(
+                xml.dom.minidom.parse("robots/pr2/pr2_1.11.4.xml"),
+                quick_xacro(output)))
+
+    def test_default_param(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="fixed_link" params="parent_link:=base_link child_link *joint_pose">
+    <link name="${child_link}"/>
+    <joint name="${child_link}_joint" type="fixed">
+      <xacro:insert_block name="joint_pose" />
+      <parent link="${parent_link}"/>
+      <child link="${child_link}" />
+    </joint>
+  </xacro:macro>
+  <xacro:fixed_link child_link="foo">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:fixed_link >
+</robot>'''), 
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <link name="foo"/>
+  <joint name="foo_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="base_link"/>
+    <child link="foo"/>
+  </joint>
+</robot>'''))
+
+    def test_default_param_override(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="fixed_link" params="parent_link:=base_link child_link *joint_pose">
+    <link name="${child_link}"/>
+    <joint name="${child_link}_joint" type="fixed">
+      <xacro:insert_block name="joint_pose" />
+      <parent link="${parent_link}"/>
+      <child link="${child_link}" />
+    </joint>
+  </xacro:macro>
+  <xacro:fixed_link child_link="foo" parent_link="bar">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:fixed_link >
+</robot>'''), 
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <link name="foo"/>
+  <joint name="foo_joint" type="fixed">
+    <origin rpy="0 0 0" xyz="0 0 0"/>
+    <parent link="bar"/>
+    <child link="foo"/>
+  </joint>
+</robot>'''))
+
+    def test_param_missing(self):
+        self.assertRaises(xacro.XacroException,
+                          quick_xacro, '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="fixed_link" params="parent_link child_link *joint_pose">
+    <link name="${child_link}"/>
+    <joint name="${child_link}_joint" type="fixed">
+      <xacro:insert_block name="joint_pose" />
+      <parent link="${parent_link}"/>
+      <child link="${child_link}" />
+    </joint>
+  </xacro:macro>
+  <xacro:fixed_link child_link="foo">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:fixed_link >
+</robot>''')
+
+    def test_default_arg(self):
+        set_substitution_args_context({})
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="foo" default="2"/>
+  <link name="my_link">
+    <origin xyz="0 0 $(arg foo)"/>
+  </link>
+</robot>
+'''),'''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <link name="my_link">
+    <origin xyz="0 0 2"/>
+  </link>
+</robot>'''))
+        set_substitution_args_context({})
+
+    def test_default_arg_override(self):
+        set_substitution_args_context(load_mappings(['foo:=4']))
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="foo" default="2"/>
+  <link name="my_link">
+    <origin xyz="0 0 $(arg foo)"/>
+  </link>
+</robot>
+'''),'''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <link name="my_link">
+    <origin xyz="0 0 4"/>
+  </link>
+</robot>'''))
+        set_substitution_args_context({})
+
+    def test_default_arg_missing(self):
+        set_substitution_args_context({})
+        self.assertRaises(Exception,
+            quick_xacro, '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <link name="my_link">
+    <origin xyz="0 0 $(arg foo)"/>
+  </link>
+</robot>
+''')
+        set_substitution_args_context({})
