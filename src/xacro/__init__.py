@@ -104,22 +104,25 @@ class Table:
     def __init__(self, parent=None):
         self.parent = parent
         self.table = {}
-        self.unevaluated = [] # list of unevaluated variables
+        self.unevaluated = set() # set of unevaluated variables
         self.recursive = [] # list of currently resolved vars (to resolve recursive definitions)
+
+    def _resolve_(self,key):
+        # lazy evaluation
+        if key in self.unevaluated:
+            if key in self.recursive:
+                raise XacroException("recursive variable definition: %s" %
+                                     " -> ".join(self.recursive + [key]))
+            self.recursive.append(key)
+            self.table[key] = eval_text(self.table[key], self)
+            self.unevaluated.remove(key)
+            self.recursive.remove(key)
+        # return evaluated result
+        return self.table[key]
 
     def __getitem__(self, key):
         if key in self.table:
-            # lazy evaluation
-            if key in self.unevaluated:
-                if key in self.recursive:
-                    raise XacroException("recursive variable definition: %s" %
-                                         " -> ".join(self.recursive + [key]))
-                self.recursive.append(key)
-                self.table[key] = eval_text(self.table[key], self)
-                self.unevaluated.remove(key)
-                self.recursive.remove(key)
-            # return evaluated result
-            return self.table[key]
+            return self._resolve_(key)
         elif self.parent:
             return self.parent[key]
         else:
@@ -138,7 +141,7 @@ class Table:
         self.table[key] = value
         if isinstance(value, basestring):
             # strings need to be evaluated again at first access
-            self.unevaluated.append(key)
+            self.unevaluated.add(key)
         elif key in self.unevaluated:
             # all other types cannot be evaluated
             self.unevaluated.remove(key)
@@ -525,6 +528,7 @@ def eval_all(root, macros={}, symbols=Table()):
                 node.parentNode.removeChild(node)
 
                 node = None
+
             elif node.tagName == 'arg' or node.tagName == 'xacro:arg':
                 name = node.getAttribute('name')
                 if not name:
@@ -567,8 +571,6 @@ def eval_all(root, macros={}, symbols=Table()):
                         else: keep = ast.literal_eval(value)
                     else: keep = bool(value)
                 except:
-                    print ("if failure", value, type(value))
-                    raise
                     raise XacroException("Xacro conditional \"%s\" evaluated to \"%s\", which is not a boolean expression." % (node.getAttribute('value'), value))
                 if node.tagName in ['unless', 'xacro:unless']: keep = not keep
                 if keep:
@@ -578,6 +580,9 @@ def eval_all(root, macros={}, symbols=Table()):
                 node.parentNode.removeChild(node)
 
             else:
+                if node.tagName.startswith("xacro:"):
+                    raise XacroException("unknown macro name: %s" % node.tagName)
+
                 # Evals the attributes
                 for at in node.attributes.items():
                     result = str(eval_text(at[1], symbols))
