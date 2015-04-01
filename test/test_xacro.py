@@ -167,6 +167,12 @@ class TestXacro(unittest.TestCase):
         # res = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro"><a name="foo"/></a>'''
         self.assertTrue(xml_matches(quick_xacro(src), res))
 
+    def test_macro_undefined(self):
+        self.assertRaises(xacro.XacroException,
+                          quick_xacro,
+                          '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+                          <xacro:undefined><foo/><bar/></xacro:undefined></a>''')
+
     def test_inorder_processing(self):
         src = '''<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <property name="foo" value="1.0"/>
@@ -392,6 +398,12 @@ class TestXacro(unittest.TestCase):
     <b />
 </robot>'''))      
 
+    def test_invalid_if_statement(self):
+        self.assertRaises(xacro.XacroException,
+                          quick_xacro,
+                          '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+                          <xacro:if value="nonsense"><foo/></xacro:if></a>''')
+
     def test_integer_if_statement(self):
         self.assertTrue(
             xml_matches(
@@ -555,6 +567,22 @@ class TestXacro(unittest.TestCase):
                 '''\
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
   <answer product="6"/>
+</robot>'''))
+
+    def test_multiple_definition_and_evaluation(self):
+        self.assertTrue(
+            xml_matches(
+                quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="a" value="42"/>
+  <xacro:property name="b" value="${a}"/>
+  <xacro:property name="b" value="${-a}"/>
+  <xacro:property name="b" value="${a}"/>
+  <answer b="${b} ${b} ${b}"/>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <answer b="42 42 42"/>
 </robot>'''))
 
     def test_transitive_evaluation(self):
