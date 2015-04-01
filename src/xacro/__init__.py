@@ -91,9 +91,11 @@ def fixed_writexml(self, writer, indent="", addindent="", newl=""):
             return
         writer.write(">%s" % (newl))
         for node in self.childNodes:
-            if node.nodeType is not xml.dom.minidom.Node.TEXT_NODE:  # 3:
-                node.writexml(writer, indent + addindent, addindent, newl)
-                #node.writexml(writer,indent+addindent,addindent,newl)
+            # skip whitespace-only text nodes
+            if node.nodeType == xml.dom.minidom.Node.TEXT_NODE and \
+               not node.data.strip():
+                continue
+            node.writexml(writer, indent + addindent, addindent, newl)
         writer.write("%s</%s>%s" % (indent, self.tagName, newl))
     else:
         writer.write("/>%s" % (newl))
@@ -194,11 +196,10 @@ def next_node(node):
     return None
 
 
-def child_elements(elt):
+def child_nodes(elt):
     c = elt.firstChild
     while c:
-        if c.nodeType == xml.dom.Node.ELEMENT_NODE:
-            yield c
+        yield c
         c = c.nextSibling
 
 all_includes = []
@@ -270,8 +271,8 @@ def process_includes(doc, base_dir):
                     raise XacroException("included file \"%s\" could not be opened: %s" % (filename, str(e)))
 
                 # Replaces the include tag with the elements of the included file
-                for c in child_elements(included.documentElement):
-                    elt.parentNode.insertBefore(c.cloneNode(1), elt)
+                for c in child_nodes(included.documentElement):
+                    elt.parentNode.insertBefore(c.cloneNode(deep=True), elt)
 
                 # Grabs all the declared namespaces of the included document
                 for name, value in included.documentElement.attributes.items():
@@ -513,7 +514,7 @@ def eval_all(root, macros, symbols):
                         defaultmap[splitParam[0]] = splitParam[1]
                         params.remove(param)
                         params.append(splitParam[0])
-                        
+
                     elif len(splitParam) != 1:
                         raise XacroException("Invalid parameter definition")
 
@@ -552,19 +553,19 @@ def eval_all(root, macros, symbols):
                 eval_all(body, macros, scoped)
 
                 # Replaces the macro node with the expansion
-                for e in list(child_elements(body)):  # Ew
+                for e in list(child_nodes(body)):  # Ew
                     node.parentNode.insertBefore(e, node)
                 node.parentNode.removeChild(node)
 
                 node = None
-            elif node.tagName == 'arg' or node.tagName == 'xacro:arg':
+            elif node.tagName == 'xacro:arg':
                 name = node.getAttribute('name')
                 if not name:
                     raise XacroException("Argument name missing")
                 default = node.getAttribute('default')
                 if default and name not in substitution_args_context['arg']:
                     substitution_args_context['arg'][name] = default
-                
+
                 node.parentNode.removeChild(node)
                 node = None
 
@@ -575,7 +576,7 @@ def eval_all(root, macros, symbols):
                     # Multi-block
                     block = symbols['**' + name]
 
-                    for e in list(child_elements(block)):
+                    for e in list(child_nodes(block)):
                         node.parentNode.insertBefore(e.cloneNode(deep=True), node)
                     node.parentNode.removeChild(node)
                 elif ("*" + name) in symbols:
@@ -590,7 +591,7 @@ def eval_all(root, macros, symbols):
                 node = None
             elif node.tagName in ['if', 'xacro:if', 'unless', 'xacro:unless']:
                 value = eval_text(node.getAttribute('value'), symbols)
-                try: 
+                try:
                     if value == 'true': keep = True
                     elif value == 'false': keep = False
                     else: keep = float(value)
@@ -598,10 +599,8 @@ def eval_all(root, macros, symbols):
                     raise XacroException("Xacro conditional evaluated to \"%s\". Acceptable evaluations are one of [\"1\",\"true\",\"0\",\"false\"]" % value)
                 if node.tagName in ['unless', 'xacro:unless']: keep = not keep
                 if keep:
-                    for e in list(child_elements(node)):
-                        cloned = node.cloneNode(deep=True)
-                        eval_all(cloned, macros, symbols)
-                        node.parentNode.insertBefore(e, node)
+                    for e in list(child_nodes(node)):
+                        node.parentNode.insertBefore(e.cloneNode(deep=True), node)
 
                 node.parentNode.removeChild(node)
             else:
@@ -637,6 +636,11 @@ def print_usage(exit_code=0):
 def set_substitution_args_context(context={}):
     substitution_args_context['arg'] = context
 
+def open_output(output_filename):
+    if output_filename is None:
+        return sys.stdout
+    else:
+        return open(output_filename, 'w')
 
 def main():
     try:
@@ -648,12 +652,12 @@ def main():
     just_deps = False
     just_includes = False
 
-    output = sys.stdout
+    output_filename = None
     for o, a in opts:
         if o == '-h':
             print_usage(0)
         elif o == '-o':
-            output = open(a, 'w')
+            output_filename = a
         elif o == '--deps':
             just_deps = True
         elif o == '--includes':
@@ -686,7 +690,7 @@ def main():
             sys.stdout.write(inc + " ")
         sys.stdout.write("\n")
     elif just_includes:
-        doc.writexml(output)
+        doc.writexml(open_output(output_filename))
         print()
     else:
         eval_self_contained(doc)
@@ -699,5 +703,5 @@ def main():
         for comment in banner:
             doc.insertBefore(comment, first)
 
-        output.write(doc.toprettyxml(indent='  '))
+        open_output(output_filename).write(doc.toprettyxml(indent='  '))
         print()
