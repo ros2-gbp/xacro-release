@@ -40,6 +40,7 @@ import ast
 import math
 
 from roslaunch import substitution_args
+from rospkg.common import ResourceNotFound
 from copy import deepcopy
 from .color import warning, error, message
 from .xmlutils import *
@@ -181,6 +182,8 @@ def eval_extension(s):
         return substitution_args.resolve_args(s, context=substitution_args_context, resolve_anon=False)
     except substitution_args.ArgException as e:
         raise XacroException("Undefined substitution argument", exc=e)
+    except ResourceNotFound as e:
+        raise XacroException("resource not found:", exc=e)
 
 
 do_check_order=False
@@ -241,14 +244,18 @@ class Table(object):
         else:
             raise KeyError(key)
 
-    def __setitem__(self, key, value):
+    def _setitem(self, key, value, unevaluated):
         if do_check_order and key in self.used and key not in self.redefined:
             self.redefined[key] = filestack[-1]
 
+        if key in global_symbols:
+            warning("redefining global property: %s" % key)
+            print_location(filestack)
+
         value = self._eval_literal(value)
         self.table[key] = value
-        if isinstance(value, _basestr):
-            # strings need to be evaluated again at first access
+        if unevaluated and isinstance(value, _basestr):
+            # literal evaluation failed: re-evaluate lazily at first access
             self.unevaluated.add(key)
         elif key in self.unevaluated:
             # all other types cannot be evaluated
@@ -256,6 +263,9 @@ class Table(object):
         if (verbosity > 2 and self.parent is None) or verbosity > 3:
             print("{indent}set {key}: {value} ({loc})".format(
                 indent=self.depth*' ', key=key, value=value, loc=filestack[-1]), file=sys.stderr)
+
+    def __setitem__(self, key, value):
+        self._setitem(key, value, unevaluated=True)
 
     def __contains__(self, key):
         return \
@@ -451,6 +461,30 @@ def is_valid_name(name):
     return False
 
 
+re_macro_arg = re.compile(r'''\s*([^\s:=]+?):?=(\^\|?)?((?:(?:'[^']*')?[^\s'"]*?)*)(?:\s+|$)(.*)''')
+#                           space   param    :=   ^|   <--      default      -->   space    rest
+def parse_macro_arg(s):
+    """
+    parse the first param spec from a macro parameter string s
+    accepting the following syntax: <param>[:=|=][^|]<default>
+    :param s: param spec string
+    :return: param, (forward, default), rest-of-string
+             forward will be either param or None (depending on whether ^ was specified)
+             default will be the default string or None
+             If there is no default spec at all, the middle pair will be replaced by None
+    """
+    m = re_macro_arg.match(s)
+    if m:
+        # there is a default value specified for param
+        param, forward, default, rest = m.groups()
+        if not default: default = None
+        return param, (param if forward else None, default), rest
+    else:
+        # there is no default specified at all
+        result = s.lstrip(' ').split(' ', 1)
+        return result[0], None, result[1] if len(result) > 1 else ''
+
+
 def grab_macro(elt, macros):
     assert(elt.tagName in ['macro', 'xacro:macro'])
     remove_previous_comments(elt)
@@ -458,8 +492,8 @@ def grab_macro(elt, macros):
     name, params = check_attrs(elt, ['name'], ['params'])
     if name == 'call':
         warning("deprecated use of macro name 'call'; xacro:call became a new keyword")
-    if not is_valid_name(name):
-        warning('Macro names should be valid python identifiers: ' + name)
+    if name.find('.') != -1:
+        warning("macro names must not contain '.': %s" % name)
 
     # fetch existing or create new macro definition
     macro = macros.get(name, Macro())
@@ -468,17 +502,13 @@ def grab_macro(elt, macros):
     macro.body = elt
 
     # parse params and their defaults
-    macro.params = params = params.split() if params else []
-    macro.defaultmap = defaultmap = {}
-    for i, param in enumerate(params):
-        splitParam = param.split(':=')
-
-        if len(splitParam) == 2:
-            defaultmap[splitParam[0]] = splitParam[1]  # parameter with default
-            params[i] = splitParam[0]  # only keep the name
-
-        elif len(splitParam) != 1:
-            raise XacroException("Invalid parameter definition '%s' for macro '%s'".format(param, name))
+    macro.params = []
+    macro.defaultmap = {}
+    while params:
+        param, value, params = parse_macro_arg(params)
+        macro.params.append(param)
+        if value is not None:
+            macro.defaultmap[param] = value  # parameter with default
 
     macros[name] = macro
     replace_node(elt, by=None)
@@ -510,14 +540,23 @@ def grab_property(elt, table):
         name = '**' + name
         value = elt  # debug
 
-    if scope and scope == 'global': table = table.root()
-    if scope and scope == 'parent':
+    if scope and scope == 'global':
+        target_table = table.root()
+        unevaluated = False
+    elif scope and scope == 'parent':
         if table.parent:
-            table = table.parent
+            target_table = table.parent
         else:
             warning("%s: no parent scope at global scope " % name)
+        unevaluated = False
+    else:
+        target_table = table
+        unevaluated = True
 
-    table[name] = value
+    if not unevaluated and isinstance(value, _basestr):
+        value = eval_text(value, table)
+
+    target_table._setitem(name, value, unevaluated=unevaluated)
     replace_node(elt, by=None)
 
 
@@ -574,6 +613,18 @@ def eval_text(text, symbols):
         return ''.join(map(str, results))
 
 
+def eval_default_arg(forward_variable, default, symbols, macro):
+    if forward_variable is None:
+        return eval_text(default, symbols)
+    try:
+        return symbols[forward_variable]
+    except KeyError:
+        if default is not None:
+            return eval_text(default, symbols)
+        else:
+            raise XacroException("Undefined property to forward: " + forward_variable, macro=macro)
+
+
 def handle_dynamic_macro_call(node, macros, symbols):
     name, = reqd_attrs(node, ['macro'])
     if not name:
@@ -584,31 +635,47 @@ def handle_dynamic_macro_call(node, macros, symbols):
     node.removeAttribute('macro')
     node.tagName = name
     # forward to handle_macro_call
-    result = handle_macro_call(node, name, macros, symbols)
+    result = handle_macro_call(node, macros, symbols)
     if not result:  # we expect the call to succeed
         raise XacroException("unknown macro name '%s' in xacro:call" % name)
     return True
 
-def handle_macro_call(node, name, macros, symbols):
-    if name.startswith('xacro:'):
-        name = name.replace('xacro:', '')
+def resolve_macro(fullname, macros):
+    # split name into namespaces and real name
+    namespaces = fullname.split('.')
+    name = namespaces.pop(-1)
+    # move xacro: prefix from first namespace to name
+    if namespaces and namespaces[0].startswith('xacro:'):
+        namespaces[0] = namespaces[0].replace('xacro:', '')
+        name = 'xacro:' + name
 
-    try:
-        m = None
-        m = macros[name]  # try simple macro resolution from macros dict
-    except KeyError:
-        pass
+    def _resolve(namespaces, name, macros):
+        # traverse namespaces to actual macros dict
+        for ns in namespaces:
+            macros = macros[ns]
+        try:
+            return macros[name]
+        except KeyError:
+            # try without xacro: prefix as well
+            if name.startswith('xacro:'):
+                return _resolve([], name.replace('xacro:',''), macros)
 
+    # try fullname and (namespaces, name) in this order
+    m = _resolve([], fullname, macros)
+    if m: return m
+    elif namespaces: return _resolve(namespaces, name, macros)\
+
+
+def handle_macro_call(node, macros, symbols):
     try:
-        #  using eval allows to employ python's resolving mechanism
-        #  to also resolve macros in namespaces, e.g. ns1.ns2.macro
-        m = m or eval(name, dict(__builtins__={}), macros)
+        m = resolve_macro(node.tagName, macros)
         body = m.body.cloneNode(deep=True)
-    except (NameError, TypeError):  # that wasn't a known macro
+
+    except (KeyError, TypeError, AttributeError):
         # TODO If deprecation runs out, this test should be moved up front
         if node.tagName == 'xacro:call':
             return handle_dynamic_macro_call(node, macros, symbols)
-        return False
+        return False  # no macro
 
     # Expand the macro
     scoped = Table(symbols)  # new local name space for macro evaluation
@@ -617,8 +684,8 @@ def handle_macro_call(node, name, macros, symbols):
         if name not in params:
             raise XacroException("Invalid parameter \"%s\"" % str(name), macro=m)
         params.remove(name)
-        scoped[name] = eval_text(value, symbols)
-        node.setAttribute(name, "")  # avoid second evaluation in eval_all()
+        scoped._setitem(name, eval_text(value, symbols), unevaluated=False)
+        node.setAttribute(name, "")  # suppress second evaluation in eval_all()
 
     # Evaluate block parameters in node
     eval_all(node, macros, symbols)
@@ -638,10 +705,13 @@ def handle_macro_call(node, name, macros, symbols):
 
     # Try to load defaults for any remaining non-block parameters
     for param in params[:]:
+        # block parameters are not supported for defaults
         if param[0] == '*': continue
-        value = m.defaultmap.get(param, None)
-        if value is not None:
-            scoped[param] = eval_text(value, symbols)
+
+        # get default
+        name, default = m.defaultmap.get(param, (None,None))
+        if name is not None or default is not None:
+            scoped._setitem(param, eval_default_arg(name, default, symbols, m), unevaluated=False)
             params.remove(param)
 
     if params:
@@ -734,7 +804,10 @@ def eval_all(node, macros, symbols):
                     raise XacroException("Undefined block \"%s\"" % name)
 
                 # cloning block allows to insert the same block multiple times
-                replace_node(node, by=block.cloneNode(deep=True), content_only=content_only)
+                block = block.cloneNode(deep=True)
+                # recursively evaluate block
+                eval_all(block, macros, symbols)
+                replace_node(node, by=block, content_only=content_only)
 
             elif is_include(node):
                 process_include(node, macros, symbols, eval_all)
@@ -787,7 +860,7 @@ def eval_all(node, macros, symbols):
                 else:
                     replace_node(node, by=None)
 
-            elif handle_macro_call(node, node.tagName, macros, symbols):
+            elif handle_macro_call(node, macros, symbols):
                 pass  # handle_macro_call does all the work of expanding the macro
 
             else:
