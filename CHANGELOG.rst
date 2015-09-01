@@ -2,6 +2,12 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+1.10.6 (2015-09-01)
+-------------------
+* use correct catkin environment for cmake dependency checking
+* fixed dependency definition for cmake usage
+* Contributors: Robert Haschke
+
 1.10.5 (2015-08-12)
 -------------------
 * fix #108: evaluate property blocks recursively too
