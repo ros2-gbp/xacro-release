@@ -5,9 +5,7 @@ from catkin_pkg.python_setup import generate_distutils_setup
 
 d = generate_distutils_setup(
     packages=['xacro'],
-    package_dir={'': 'src'},
-    scripts=['scripts/xacro'],
-    requires=['xml', 'roslaunch', 'rosgraph']
+    package_dir={'': 'src'}
 )
 
 setup(**d)
