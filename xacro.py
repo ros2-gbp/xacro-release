@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+# Copyright (c) 2015, Open Source Robotics Foundation, Inc.
 # Copyright (c) 2013, Willow Garage, Inc.
 # All rights reserved.
 #
@@ -10,9 +11,9 @@
 #     * Redistributions in binary form must reproduce the above copyright
 #       notice, this list of conditions and the following disclaimer in the
 #       documentation and/or other materials provided with the distribution.
-#     * Neither the name of the Willow Garage, Inc. nor the names of its
-#       contributors may be used to endorse or promote products derived from
-#       this software without specific prior written permission.
+#     * Neither the name of the Open Source Robotics Foundation, Inc. nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -26,8 +27,8 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Author: Stuart Glaser
-# Maintainer: William Woodall <wwoodall@willowgarage.com>
+# Authors: Stuart Glaser, William Woodall, Robert Haschke
+# Maintainer: Morgan Quigley <morgan@osrfoundation.org>
 
 #### READ THIS! THIS FILE ONLY FOR BACKWARDS COMPATIBILITY!!!!!!
 #
@@ -52,9 +53,12 @@ os.chdir(cur_dir)
 sys.path = filter(lambda a: a not in [this_dir, this_dir_cwd], sys.path)
 
 import xacro
+from xacro.color import warning
 
 # Restore the path
 sys.path = backup_path
 
-if __name__ == '__main__':
-    xacro.main()
+xacro.main()
+
+# issue deprecation warning
+warning('xacro.py is deprecated; please use xacro instead')
