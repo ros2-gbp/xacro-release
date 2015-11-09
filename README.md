@@ -1,3 +1,27 @@
+## xacro (indigo) - 1.9.5-0
+
+The packages in the `xacro` repository were released into the `indigo` distro by running `/usr/bin/bloom-release xacro --track indigo --rosdistro indigo` on `Mon, 09 Nov 2015 20:19:16 -0000`
+
+The `xacro` package was released.
+
+These packages were explicitly ignored:
+- `test_xacro`
+
+Version of package(s) in repository `xacro`:
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: https://github.com/ros-gbp/xacro-release.git
+- rosdistro version: `1.9.4-0`
+- old version: `1.9.4-1`
+- new version: `1.9.5-0`
+
+Versions of tools used:
+- bloom version: `0.5.20`
+- catkin_pkg version: `0.2.10`
+- rosdep version: `0.11.4`
+- rosdistro version: `0.4.2`
+- vcstools version: `0.1.38`
+
+
 ## xacro (jade) - 1.10.6-0
 
 The packages in the `xacro` repository were released into the `jade` distro by running `/usr/bin/bloom-release xacro --track jade --rosdistro jade` on `Tue, 01 Sep 2015 16:32:39 -0000`
