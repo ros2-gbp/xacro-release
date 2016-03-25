@@ -1,3 +1,26 @@
+## xacro (kinetic) - 1.11.0-0
+
+The packages in the `xacro` repository were released into the `kinetic` distro by running `/usr/bin/bloom-release xacro --track kinetic --rosdistro kinetic --new-track` on `Fri, 25 Mar 2016 22:35:14 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: unknown
+- rosdistro version: `null`
+- old version: `null`
+- new version: `1.11.0-0`
+
+Versions of tools used:
+
+- bloom version: `0.5.21`
+- catkin_pkg version: `0.2.10`
+- rosdep version: `0.11.4`
+- rosdistro version: `0.4.5`
+- vcstools version: `0.1.38`
+
+
 ## xacro (indigo) - 1.9.5-0
 
 The packages in the `xacro` repository were released into the `indigo` distro by running `/usr/bin/bloom-release xacro --track indigo --rosdistro indigo` on `Mon, 09 Nov 2015 20:19:16 -0000`
