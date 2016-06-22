@@ -165,8 +165,8 @@ class TestXacroFunctions(unittest.TestCase):
         self.assertFalse(xacro.is_valid_name('invalid.too'))  # dot separates fields
 
     def test_resolve_macro(self):
-        # define three nested macro dicts with the same content
-        content = {'simple': 'simple', 'xacro:prefixed': 'prefixed'}
+        # define three nested macro dicts with the same macro names (keys)
+        content = {'xacro:simple': 'simple'}
         ns2 = dict({k: v+'2' for k,v in content.iteritems()})
         ns1 = dict({k: v+'1' for k,v in content.iteritems()})
         ns1.update(ns2=ns2)
@@ -181,26 +181,18 @@ class TestXacroFunctions(unittest.TestCase):
         self.assertEqual(xacro.resolve_macro('xacro:ns1.simple', macros), 'simple1')
         self.assertEqual(xacro.resolve_macro('xacro:ns1.ns2.simple', macros), 'simple2')
 
-        self.assertEqual(xacro.resolve_macro('prefixed', macros), None)
-        self.assertEqual(xacro.resolve_macro('ns1.prefixed', macros), None)
-        self.assertEqual(xacro.resolve_macro('ns1.ns2.prefixed', macros), None)
-
-        self.assertEqual(xacro.resolve_macro('xacro:prefixed', macros), 'prefixed')
-        self.assertEqual(xacro.resolve_macro('xacro:ns1.prefixed', macros), 'prefixed1')
-        self.assertEqual(xacro.resolve_macro('xacro:ns1.ns2.prefixed', macros), 'prefixed2')
+    def check_macro_arg(self, s, param, forward, default, rest):
+        p, v, r = xacro.parse_macro_arg(s)
+        self.assertEqual(p, param, msg="'{0}' != '{1}' parsing {2}".format(p, param, s))
+        if forward or default:
+            self.assertTrue(v is not None)
+            self.assertEqual(v[0], forward, msg="'{0}' != '{1}' parsing {2}".format(v[0], forward, s))
+            self.assertEqual(v[1], default, msg="'{0}' != '{1}' parsing {2}".format(v[1], default, s))
+        else:
+            self.assertTrue(v is None)
+        self.assertEqual(r, rest, msg="'{0}' != '{1}' parsing {2}".format(r, rest, s))
 
     def test_parse_macro_arg(self):
-        def check(s, param, forward, default, rest):
-            p, v, r = xacro.parse_macro_arg(s)
-            self.assertEqual(p, param, msg="'{0}' != '{1}' parsing {2}".format(p, param, s))
-            if forward or default:
-                self.assertTrue(v is not None)
-                self.assertEqual(v[0], forward, msg="'{0}' != '{1}' parsing {2}".format(v[0], forward, s))
-                self.assertEqual(v[1], default, msg="'{0}' != '{1}' parsing {2}".format(v[1], default, s))
-            else:
-                self.assertTrue(v is None)
-            self.assertEqual(r, rest, msg="'{0}' != '{1}' parsing {2}".format(r, rest, s))
-
         for forward in ['', '^', '^|']:
             defaults = ['', "f('some string','some other')", "f('a b')"]
             if forward == '^': defaults = ['']
@@ -209,10 +201,12 @@ class TestXacroFunctions(unittest.TestCase):
                 for sep in seps:
                     for rest in ['', ' ', ' bar', ' bar=42']:
                         s = 'foo{0}{1}{2}{3}'.format(sep, forward, default, rest)
-                        check(s, 'foo', 'foo' if forward else None,
-                              default if default else None,
-                              rest.lstrip(' '))
-        check('  foo bar=341', 'foo', None, None, 'bar=341')
+                        self.check_macro_arg(s, 'foo', 'foo' if forward else None,
+                                             default if default else None,
+                                             rest.lstrip())
+    def test_parse_macro_whitespace(self):
+        for ws in ['  ', ' \t ', ' \n ']:
+            self.check_macro_arg(ws + 'foo' + ws + 'bar=42' + ws, 'foo', None, None, 'bar=42' + ws)
 
 # base class providing some convenience functions
 class TestXacroBase(unittest.TestCase):
@@ -984,15 +978,17 @@ class TestXacro(TestXacroCommentsIgnored):
   <a list="[0, 2, 2]" tuple="(0, 2, 2)" dict="{'a': 0, 'c': 2, 'b': 2}"/>
 </a>''')
 
-    def test_ros_arg_param(self):
+    def test_enforce_xacro_ns(self):
         self.assert_matches(
                 self.quick_xacro('''\
 <a xmlns:xacro="http://www.ros.org/wiki/xacro">
   <arg name="foo" value="bar"/>
+  <include filename="foo"/>
 </a>''', xacro_ns=False),
 '''\
 <a xmlns:xacro="http://www.ros.org/wiki/xacro">
   <arg name="foo" value="bar"/>
+  <include filename="foo"/>
 </a>''')
 
     def test_issue_68_numeric_arg(self):
@@ -1062,6 +1058,15 @@ class TestXacro(TestXacroCommentsIgnored):
         self.assert_matches(self.quick_xacro(src % '|'), res % '42')
         self.assert_matches(self.quick_xacro(src % '|6'), res % '42')
 
+    def test_extension_in_expression(self):
+        src='''<a xmlns:xacro="http://www.ros.org/wiki/xacro">${2*'$(arg var)'}</a>'''
+        res='''<a xmlns:xacro="http://www.ros.org/wiki/xacro">%s</a>'''
+        self.assert_matches(self.quick_xacro(src, ['var:=xacro']), res % (2*'xacro'))
+
+    def test_expression_in_extension(self):
+        src='''<a xmlns:xacro="http://www.ros.org/wiki/xacro">$(arg ${'v'+'ar'})</a>'''
+        res='''<a xmlns:xacro="http://www.ros.org/wiki/xacro">%s</a>'''
+        self.assert_matches(self.quick_xacro(src, ['var:=xacro']), res % 'xacro')
 
 # test class for in-order processing
 class TestXacroInorder(TestXacro):
