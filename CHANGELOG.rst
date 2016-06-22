@@ -2,24 +2,26 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1.10.7 (2016-06-22)
+1.11.1 (2016-06-22)
 -------------------
 * workaround for xml.dom.minidom issue
 * ensure non-empty error string
+* Contributors: Robert Haschke
+
+1.11.0 (2016-03-25)
+-------------------
 * added short option -i as alternative to --inorder
-* refactored main(), fix #122
-* added xacro indicator to error message, fix #123
+* refactored main to fix #122, #107
+* added xacro indicator to error message to fix #123
 * moved banner generation to process_file()
 * removed special (but obsolete) output handling for just_includes mode
-* fixed unrelated typo
 * moved core processing pipeline into function process_file()
-* improved documentation: added more comments,input_file -> input_file_name
+* improved documentation: more comments, input_file -> input_file_name
 * fix #120: handle non-space whitespace characters in params string
 * extended tests to handle non-space whitespace characters in params string
-* always store macros with xacro: prefix in front for #118
+* always store macros with xacro: prefix in front: #118
 * fix #115: enforce xacro namespace usage with --xacro-ns option
-* apply correct checking for include tags too
-* extended the testcase to include
+* apply correct checking for include tags, and extend testcase
 * allow (one-level) nested expression/extension evaluation
 * Contributors: Robert Haschke, Morgan Quigley
 
