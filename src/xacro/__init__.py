@@ -129,8 +129,8 @@ class XacroException(Exception):
         self.macros = [] if macro is None else [macro]
 
     def __str__(self):
-        return ' '.join([str(item) for item in
-                         [self.message, self.exc, self.suffix] if item])
+        items = [super(XacroException, self).__str__(), self.exc, self.suffix]
+        return ' '.join([str(e) for e in items if e])
 
 
 verbosity = 1
@@ -902,7 +902,7 @@ def parse(inp, filename=None):
     try:
         if isinstance(inp, _basestr):
             return xml.dom.minidom.parseString(inp)
-        elif isinstance(inp, file):
+        elif hasattr(inp, 'read'):
             return xml.dom.minidom.parse(inp)
         return inp
 
