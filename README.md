@@ -1,3 +1,26 @@
+## xacro (lunar) - 1.12.0-0
+
+The packages in the `xacro` repository were released into the `lunar` distro by running `/usr/bin/bloom-release xacro --track lunar --rosdistro lunar --new-track` on `Sat, 25 Mar 2017 19:55:45 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: unknown
+- rosdistro version: `null`
+- old version: `null`
+- new version: `1.12.0-0`
+
+Versions of tools used:
+
+- bloom version: `0.5.25`
+- catkin_pkg version: `0.3.1`
+- rosdep version: `0.11.5`
+- rosdistro version: `0.6.1`
+- vcstools version: `0.1.39`
+
+
 ## xacro (kinetic) - 1.11.2-0
 
 The packages in the `xacro` repository were released into the `kinetic` distro by running `/usr/bin/bloom-release xacro --track kinetic --rosdistro kinetic` on `Tue, 28 Feb 2017 00:20:29 -0000`
