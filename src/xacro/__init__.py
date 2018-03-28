@@ -103,13 +103,15 @@ def load_yaml(filename):
     finally:
         f.close()
         restore_filestack(oldstack)
+        global all_includes
+        all_includes.append(filename)
 
 
 # global symbols dictionary
 # taking simple security measures to forbid access to __builtins__
 # only the very few symbols explicitly listed are allowed
 # for discussion, see: http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
-global_symbols = {'__builtins__': {k: __builtins__[k] for k in ['list', 'dict', 'map', 'str', 'float', 'int']}}
+global_symbols = {'__builtins__': {k: __builtins__[k] for k in ['list', 'dict', 'map', 'str', 'float', 'int', 'True', 'False', 'min', 'max', 'round']}}
 # also define all math symbols and functions
 global_symbols.update(math.__dict__)
 # allow to import dicts from yaml
@@ -130,7 +132,7 @@ class XacroException(Exception):
 
     def __str__(self):
         items = [super(XacroException, self).__str__(), self.exc, self.suffix]
-        return ' '.join([str(e) for e in items if e])
+        return ' '.join([str(e) for e in items if e not in ['', 'None']])
 
 
 verbosity = 1
@@ -535,13 +537,26 @@ def grab_property(elt, table):
     assert(elt.tagName in ['property', 'xacro:property'])
     remove_previous_comments(elt)
 
-    name, value, scope = check_attrs(elt, ['name'], ['value', 'scope'])
+    name, value, default, scope = check_attrs(elt, ['name'], ['value', 'default', 'scope'])
     if not is_valid_name(name):
         raise XacroException('Property names must be valid python identifiers: ' + name)
+    if value is not None and default is not None:
+        raise XacroException('Property cannot define both a default and a value: ' + name)
+
+    if default is not None:
+        if scope is not None:
+            warning("%s: default property value can only be defined on local scope" % name)
+        if name not in table:
+            value = default
+        else:
+            replace_node(elt, by=None)
+            return
 
     if value is None:
         name = '**' + name
         value = elt  # debug
+
+    replace_node(elt, by=None)
 
     if scope and scope == 'global':
         target_table = table.root()
@@ -549,9 +564,10 @@ def grab_property(elt, table):
     elif scope and scope == 'parent':
         if table.parent:
             target_table = table.parent
+            unevaluated = False
         else:
             warning("%s: no parent scope at global scope " % name)
-        unevaluated = False
+            return # cannot store the value, no reason to evaluate it
     else:
         target_table = table
         unevaluated = True
@@ -560,7 +576,6 @@ def grab_property(elt, table):
         value = eval_text(value, table)
 
     target_table._setitem(name, value, unevaluated=unevaluated)
-    replace_node(elt, by=None)
 
 
 # Fill the table of the properties
@@ -570,6 +585,8 @@ def grab_properties(elt, table):
         next = next_sibling_element(elt)
         if elt.tagName in ['property', 'xacro:property'] \
                 and check_deprecated_tag(elt.tagName):
+            if "default" in elt.attributes.keys():
+                raise XacroException('default property value supported with --inorder option only')
             grab_property(elt, table)
         else:
             grab_properties(elt, table)
@@ -1011,7 +1028,7 @@ def process_file(input_file_name, **kwargs):
 
 def main():
     opts, input_file_name = process_args(sys.argv[1:])
-    if opts.in_order == False:
+    if opts.in_order == False and not opts.just_includes:
         warning("xacro: Traditional processing is deprecated. Switch to --inorder processing!")
         message("To check for compatibility of your document, use option --check-order.", color='yellow')
         message("For more infos, see http://wiki.ros.org/xacro#Processing_Order", color='yellow')
@@ -1035,7 +1052,7 @@ def main():
         sys.exit(2)  # indicate failure, but don't print stack trace on XML errors
 
     except Exception as e:
-        msg = error(str(e))
+        msg = str(e)
         if not msg: msg = repr(e)
         error(msg)
         if verbosity > 0:
