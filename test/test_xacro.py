@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+# -*- coding: utf-8 -*-
 
 from __future__ import print_function
 
@@ -12,43 +13,69 @@ import tempfile
 import shutil
 import subprocess
 import re
-from cStringIO import StringIO
+import ast
+try:
+    from cStringIO import StringIO # Python 2.x
+except ImportError:
+    from io import StringIO # Python 3.x
 from contextlib import contextmanager
 
 
 # regex to match whitespace
 whitespace = re.compile(r'\s+')
 
+def text_values_match(a, b):
+    # generic comparison
+    if whitespace.sub(' ', a).strip() == whitespace.sub(' ', b).strip():
+        return True
+
+    try: # special handling of dicts: ignore order
+        a_dict = ast.literal_eval(a)
+        b_dict = ast.literal_eval(b)
+        if (isinstance(a_dict, dict) and isinstance(b_dict, dict) and a_dict == b_dict):
+            return True
+    except:  # Attribute values aren't dicts
+        pass
+
+    # on failure, try to split a and b at whitespace and compare snippets
+    def match_splits(a_, b_):
+        if len(a_) != len(b_): return False
+        for a, b in zip(a_, b_):
+            if a == b: continue
+            try:  # compare numeric values only up to some accuracy
+                if abs(float(a) - float(b)) > 1.0e-9:
+                    return False
+            except ValueError:  # values aren't numeric and not identical
+                return False
+        return True
+
+    return match_splits(a.split(), b.split())
+
+
 def all_attributes_match(a, b):
     if len(a.attributes) != len(b.attributes):
         print("Different number of attributes")
         return False
-    a_atts = [(a.attributes.item(i).name, a.attributes.item(i).value) for i in range(len(a.attributes))]
-    b_atts = [(b.attributes.item(i).name, b.attributes.item(i).value) for i in range(len(b.attributes))]
+    a_atts = a.attributes.items()
+    b_atts = b.attributes.items()
     a_atts.sort()
     b_atts.sort()
 
-    for i in range(len(a_atts)):
-        if a_atts[i][0] != b_atts[i][0]:
-            print("Different attribute names: %s and %s" % (a_atts[i][0], b_atts[i][0]))
+    for a, b in zip(a_atts, b_atts):
+        if a[0] != b[0]:
+            print("Different attribute names: %s and %s" % (a[0], b[0]))
             return False
-        try:
-            if abs(float(a_atts[i][1]) - float(b_atts[i][1])) > 1.0e-9:
-                print("Different attribute values: %s and %s" % (a_atts[i][1], b_atts[i][1]))
-                return False
-        except ValueError:  # Attribute values aren't numeric
-            if a_atts[i][1] != b_atts[i][1]:
-                print("Different attribute values: %s and %s" % (a_atts[i][1], b_atts[i][1]))
-                return False
-
+        if not text_values_match(a[1], b[1]):
+            print("Different attribute values: %s and %s" % (a[1], b[1]))
+            return False
     return True
 
+
 def text_matches(a, b):
-    a_norm = whitespace.sub(' ', a)
-    b_norm = whitespace.sub(' ', b)
-    if a_norm.strip() == b_norm.strip(): return True
+    if text_values_match(a, b): return True
     print("Different text values: '%s' and '%s'" % (a, b))
     return False
+
 
 def nodes_match(a, b, ignore_nodes):
     if not a and not b:
@@ -138,6 +165,16 @@ class TestMatchXML(unittest.TestCase):
     def test_normalize_whitespace_trim(self):
         self.assertTrue(text_matches(" foo bar ", "foo \t\n\r bar"))
 
+    def test_match_similar_numbers(self):
+        self.assertTrue(text_matches("0.123456789", "0.123456788"))
+    def test_mismatch_different_numbers(self):
+        self.assertFalse(text_matches("0.123456789", "0.1234567879"))
+
+    def test_match_unordered_dicts(self):
+        self.assertTrue(text_matches("{'a': 1, 'b': 2, 'c': 3}", "{'c': 3, 'b': 2, 'a': 1}"))
+    def test_mismatch_different_dicts(self):
+        self.assertFalse(text_matches("{'a': 1, 'b': 2, 'c': 3}", "{'c': 3, 'b': 2, 'a': 0}"))
+
     def test_empty_node_vs_whitespace(self):
         self.assertTrue(xml_matches('''<foo/>''', '''<foo> \t\n\r </foo>'''))
     def test_whitespace_vs_empty_node(self):
@@ -167,8 +204,8 @@ class TestXacroFunctions(unittest.TestCase):
     def test_resolve_macro(self):
         # define three nested macro dicts with the same macro names (keys)
         content = {'xacro:simple': 'simple'}
-        ns2 = dict({k: v+'2' for k,v in content.iteritems()})
-        ns1 = dict({k: v+'1' for k,v in content.iteritems()})
+        ns2 = dict({k: v+'2' for k,v in content.items()})
+        ns1 = dict({k: v+'1' for k,v in content.items()})
         ns1.update(ns2=ns2)
         macros = dict(content)
         macros.update(ns1=ns1)
@@ -411,13 +448,13 @@ class TestXacro(TestXacroCommentsIgnored):
 
     def test_escaping_dollar_braces(self):
         self.assert_matches(
-                self.quick_xacro('''<a b="$${foo}" c="$$${foo}" />'''),
-                '''<a b="${foo}" c="$${foo}" />''')
+                self.quick_xacro('''<a b="$${foo}" c="$$${foo}" d="text $${foo}" e="text $$${foo}" f="$$(pwd)" />'''),
+                '''<a b="${foo}" c="$${foo}" d="text ${foo}" e="text $${foo}" f="$(pwd)" />''')
 
     def test_just_a_dollar_sign(self):
         self.assert_matches(
-                self.quick_xacro('''<a b="$" />'''),
-                '''<a b="$" />''')
+                self.quick_xacro('''<a b="$" c="text $" d="text $ text"/>'''),
+                '''<a b="$" c="text $" d="text $ text"/>''')
 
     def test_multiple_insert_blocks(self):
         self.assert_matches(
@@ -605,6 +642,21 @@ class TestXacro(TestXacroCommentsIgnored):
                 '''\
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
     <b />
+</robot>''')
+
+    def test_boolean_if_statement(self):
+        self.assert_matches(
+                self.quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="condT" value="${True}"/>
+  <xacro:property name="condF" value="${False}"/>
+  <xacro:if value="${condF}"><a /></xacro:if>
+  <xacro:if value="${condT}"><b /></xacro:if>
+  <xacro:if value="${True}"><c /></xacro:if>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <b /><c />
 </robot>''')
 
     def test_consecutive_if(self):
@@ -1134,6 +1186,84 @@ class TestXacroInorder(TestXacro):
             self.assertTrue("foo" in output)  # foo should be reported
             self.assertTrue("bar" not in output)  # bar shouldn't be reported
 
+    def test_default_property(self):
+        src = '''
+        <a xmlns:xacro="http://www.ros.org/xacro">
+            <xacro:property name="prop" default="false"/>
+            <xacro:unless value="${prop}">
+                <foo/>
+                <xacro:property name="prop" value="true"/>
+            </xacro:unless>
+
+            <!-- second foo should be ignored -->
+            <xacro:unless value="${prop}">
+                <foo/>
+                <xacro:property name="prop" value="true"/>
+            </xacro:unless>
+        </a>'''
+        res = '''<a xmlns:xacro="http://www.ros.org/xacro"><foo/></a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_unicode_literal_parsing(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">🍔 </a>'''
+        self.assert_matches(self.quick_xacro(src), src)
+
+    def test_unicode_property(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:property name="burger" value="🍔"/>
+${burger}</a>'''
+        res = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">🍔</a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_unicode_property_attribute(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:property name="burger" value="🍔"/>
+<b c="${burger}"/></a>'''
+        res = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro"><b c="🍔"/></a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_unicode_property_block(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:property name="burger">
+🍔
+</xacro:property>
+<xacro:insert_block name="burger"/></a>'''
+        res = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">🍔</a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_unicode_conditional(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:property name="burger" value="🍔"/>
+<xacro:if value="${burger == u'🍔'}">
+🍟
+</xacro:if>
+</a>'''
+        res = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">🍟</a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_unicode_macro(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:macro name="burger" params="how_many">
+${u'🍔' * how_many}
+</xacro:macro>
+<xacro:burger how_many="4"/>
+</a>'''
+        res = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+🍔🍔🍔🍔</a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_unicode_file(self):
+        # run the full xacro processing pipeline on a file with
+        # unicode characters in it and make sure the output is correct
+        test_dir= os.path.abspath(os.path.dirname(__file__))
+        input_path = os.path.join(test_dir, 'emoji.xacro')
+        tmp_dir_name = tempfile.mkdtemp() # create directory we can trash
+        output_path = os.path.join(tmp_dir_name, "out.xml")
+        self.run_xacro(input_path, '-o', output_path)
+        output_file_created = os.path.isfile(output_path)
+        self.assert_matches(xml.dom.minidom.parse(output_path),
+            '''<robot xmlns:xacro="http://ros.org/wiki/xacro">🍔</robot>''')
+        shutil.rmtree(tmp_dir_name) # clean up after ourselves
 
 if __name__ == '__main__':
     unittest.main()
