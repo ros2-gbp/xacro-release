@@ -39,18 +39,19 @@ import sys
 import ast
 import math
 
-from roslaunch import substitution_args
-from rospkg.common import ResourceNotFound
 from copy import deepcopy
 from .color import warning, error, message
 from .xmlutils import *
 from .cli import process_args
 
 
-try:
+try: # python 2
     _basestr = basestring
-except NameError:
+    encoding = { 'encoding': 'utf-8' }
+except NameError: # python 3
     _basestr = str
+    unicode = str
+    encoding = {}
 
 # Dictionary of substitution args
 substitution_args_context = {}
@@ -103,13 +104,15 @@ def load_yaml(filename):
     finally:
         f.close()
         restore_filestack(oldstack)
+        global all_includes
+        all_includes.append(filename)
 
 
 # global symbols dictionary
 # taking simple security measures to forbid access to __builtins__
 # only the very few symbols explicitly listed are allowed
 # for discussion, see: http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
-global_symbols = {'__builtins__': {k: __builtins__[k] for k in ['list', 'dict', 'map', 'str', 'float', 'int']}}
+global_symbols = {'__builtins__': {k: __builtins__[k] for k in ['list', 'dict', 'map', 'str', 'float', 'int', 'True', 'False', 'min', 'max', 'round']}}
 # also define all math symbols and functions
 global_symbols.update(math.__dict__)
 # allow to import dicts from yaml
@@ -130,7 +133,7 @@ class XacroException(Exception):
 
     def __str__(self):
         items = [super(XacroException, self).__str__(), self.exc, self.suffix]
-        return ' '.join([str(e) for e in items if e])
+        return ' '.join([unicode(e) for e in items if e not in ['', 'None']])
 
 
 verbosity = 1
@@ -179,7 +182,11 @@ def eval_extension(s):
     if s == '$(cwd)':
         return os.getcwd()
     try:
+        from roslaunch import substitution_args
+        from rospkg.common import ResourceNotFound
         return substitution_args.resolve_args(s, context=substitution_args_context, resolve_anon=False)
+    except ImportError as e:
+        raise XacroException("substitution args not supported: ", exc=e)
     except substitution_args.ArgException as e:
         raise XacroException("Undefined substitution argument", exc=e)
     except ResourceNotFound as e:
@@ -203,17 +210,13 @@ class Table(object):
     @staticmethod
     def _eval_literal(value):
         if isinstance(value, _basestr):
-            try:
-                # try to evaluate as literal, e.g. number, boolean, etc.
-                # this is needed to handle numbers in property definitions as numbers, not strings
-                evaluated = ast.literal_eval(value.strip())
-                # However, (simple) list, tuple, dict expressions will be evaluated as such too,
-                # which would break expected behaviour. Thus we only accept the evaluation otherwise.
-                if not isinstance(evaluated, (list, dict, tuple)):
-                    return evaluated
-            except:
-                pass
-
+            # try to evaluate as number literal or boolean
+            # this is needed to handle numbers in property definitions as numbers, not strings
+            for f in [int, float, lambda x: get_boolean_value(x, None)]: # order of types is important!
+                try:
+                    return f(value)
+                except:
+                    pass
         return value
 
     def _resolve_(self, key):
@@ -273,10 +276,10 @@ class Table(object):
             (self.parent and key in self.parent)
 
     def __str__(self):
-        s = str(self.table)
+        s = unicode(self.table)
         if isinstance(self.parent, Table):
             s += "\n  parent: "
-            s += str(self.parent)
+            s += unicode(self.parent)
         return s
 
     def root(self):
@@ -535,13 +538,26 @@ def grab_property(elt, table):
     assert(elt.tagName in ['property', 'xacro:property'])
     remove_previous_comments(elt)
 
-    name, value, scope = check_attrs(elt, ['name'], ['value', 'scope'])
+    name, value, default, scope = check_attrs(elt, ['name'], ['value', 'default', 'scope'])
     if not is_valid_name(name):
         raise XacroException('Property names must be valid python identifiers: ' + name)
+    if value is not None and default is not None:
+        raise XacroException('Property cannot define both a default and a value: ' + name)
+
+    if default is not None:
+        if scope is not None:
+            warning("%s: default property value can only be defined on local scope" % name)
+        if name not in table:
+            value = default
+        else:
+            replace_node(elt, by=None)
+            return
 
     if value is None:
         name = '**' + name
         value = elt  # debug
+
+    replace_node(elt, by=None)
 
     if scope and scope == 'global':
         target_table = table.root()
@@ -549,9 +565,10 @@ def grab_property(elt, table):
     elif scope and scope == 'parent':
         if table.parent:
             target_table = table.parent
+            unevaluated = False
         else:
             warning("%s: no parent scope at global scope " % name)
-        unevaluated = False
+            return # cannot store the value, no reason to evaluate it
     else:
         target_table = table
         unevaluated = True
@@ -560,7 +577,6 @@ def grab_property(elt, table):
         value = eval_text(value, table)
 
     target_table._setitem(name, value, unevaluated=unevaluated)
-    replace_node(elt, by=None)
 
 
 # Fill the table of the properties
@@ -570,6 +586,8 @@ def grab_properties(elt, table):
         next = next_sibling_element(elt)
         if elt.tagName in ['property', 'xacro:property'] \
                 and check_deprecated_tag(elt.tagName):
+            if "default" in elt.attributes.keys():
+                raise XacroException('default property value supported with --inorder option only')
             grab_property(elt, table)
         else:
             grab_properties(elt, table)
@@ -577,10 +595,10 @@ def grab_properties(elt, table):
         elt = next
 
 
-LEXER = QuickLexer(DOLLAR_DOLLAR_BRACE=r"\$\$+\{",
-                   EXPR=r"\$\{[^\}]*\}",
-                   EXTENSION=r"\$\([^\)]*\)",
-                   TEXT=r"([^\$]|\$[^{(]|\$$)+")
+LEXER = QuickLexer(DOLLAR_DOLLAR_BRACE=r"^\$\$+(\{|\()", # multiple $ in a row, followed by { or (
+                   EXPR=r"^\$\{[^\}]*\}",       # stuff starting with ${
+                   EXTENSION=r"^\$\([^\)]*\)",  # stuff starting with $(
+                   TEXT=r"[^$]+|\$[^{($]+|\$$") # any text w/o $  or  $ following any chars except {($  or  single $
 
 
 # evaluate text and return typed value
@@ -600,20 +618,21 @@ def eval_text(text, symbols):
     lex = QuickLexer(LEXER)
     lex.lex(text)
     while lex.peek():
-        if lex.peek()[0] == lex.EXPR:
+        id = lex.peek()[0]
+        if id == lex.EXPR:
             results.append(handle_expr(lex.next()[1][2:-1]))
-        elif lex.peek()[0] == lex.EXTENSION:
+        elif id == lex.EXTENSION:
             results.append(handle_extension(lex.next()[1][2:-1]))
-        elif lex.peek()[0] == lex.TEXT:
+        elif id == lex.TEXT:
             results.append(lex.next()[1])
-        elif lex.peek()[0] == lex.DOLLAR_DOLLAR_BRACE:
+        elif id == lex.DOLLAR_DOLLAR_BRACE:
             results.append(lex.next()[1][1:])
     # return single element as is, i.e. typed
     if len(results) == 1:
         return results[0]
     # otherwise join elements to a string
     else:
-        return ''.join(map(str, results))
+        return ''.join(map(unicode, results))
 
 
 def eval_default_arg(forward_variable, default, symbols, macro):
@@ -632,7 +651,7 @@ def handle_dynamic_macro_call(node, macros, symbols):
     name, = reqd_attrs(node, ['macro'])
     if not name:
         raise XacroException("xacro:call is missing the 'macro' attribute")
-    name = str(eval_text(name, symbols))
+    name = unicode(eval_text(name, symbols))
 
     # remove 'macro' attribute and rename tag with resolved macro name
     node.removeAttribute('macro')
@@ -685,7 +704,7 @@ def handle_macro_call(node, macros, symbols):
     params = m.params[:]  # deep copy macro's params list
     for name, value in node.attributes.items():
         if name not in params:
-            raise XacroException("Invalid parameter \"%s\"" % str(name), macro=m)
+            raise XacroException("Invalid parameter \"%s\"" % unicode(name), macro=m)
         params.remove(name)
         scoped._setitem(name, eval_text(value, symbols), unevaluated=False)
         node.setAttribute(name, "")  # suppress second evaluation in eval_all()
@@ -750,9 +769,9 @@ def get_boolean_value(value, condition):
     """
     try:
         if isinstance(value, _basestr):
-            if value == 'true': return True
-            elif value == 'false': return False
-            else: return ast.literal_eval(value)
+            if value == 'true' or value == 'True': return True
+            elif value == 'false' or value == 'False': return False
+            else: return bool(int(value))
         else:
             return bool(value)
     except:
@@ -785,7 +804,7 @@ def eval_all(node, macros, symbols):
     """Recursively evaluate node, expanding macros, replacing properties, and evaluating expressions"""
     # evaluate the attributes
     for name, value in node.attributes.items():
-        result = str(eval_text(value, symbols))
+        result = unicode(eval_text(value, symbols))
         node.setAttribute(name, result)
 
     node = node.firstChild
@@ -876,7 +895,7 @@ def eval_all(node, macros, symbols):
 
         # TODO: Also evaluate content of COMMENT_NODEs?
         elif node.nodeType == xml.dom.Node.TEXT_NODE:
-            node.data = str(eval_text(node.data, symbols))
+            node.data = unicode(eval_text(node.data, symbols))
 
         node = next
 
@@ -950,7 +969,7 @@ def process_doc(doc,
     if do_check_order and symbols.redefined:
         warning("Document is incompatible to --inorder processing.")
         warning("The following properties were redefined after usage:")
-        for k, v in symbols.redefined.iteritems():
+        for k, v in symbols.redefined.items():
             message(k, "redefined in", v, color='yellow')
 
 
@@ -1011,7 +1030,7 @@ def process_file(input_file_name, **kwargs):
 
 def main():
     opts, input_file_name = process_args(sys.argv[1:])
-    if opts.in_order == False:
+    if opts.in_order == False and not opts.just_includes:
         warning("xacro: Traditional processing is deprecated. Switch to --inorder processing!")
         message("To check for compatibility of your document, use option --check-order.", color='yellow')
         message("For more infos, see http://wiki.ros.org/xacro#Processing_Order", color='yellow')
@@ -1024,7 +1043,7 @@ def main():
 
     # error handling
     except xml.parsers.expat.ExpatError as e:
-        error("XML parsing error: %s" % str(e), alt_text=None)
+        error("XML parsing error: %s" % unicode(e), alt_text=None)
         if verbosity > 0:
             print_location(filestack, e)
             print(file=sys.stderr) # add empty separator line before error
@@ -1035,7 +1054,7 @@ def main():
         sys.exit(2)  # indicate failure, but don't print stack trace on XML errors
 
     except Exception as e:
-        msg = error(str(e))
+        msg = unicode(e)
         if not msg: msg = repr(e)
         error(msg)
         if verbosity > 0:
@@ -1053,7 +1072,7 @@ def main():
         return
 
     # write output
-    out.write(doc.toprettyxml(indent='  '))
+    out.write(doc.toprettyxml(indent='  ', **encoding))
     print()
     # only close output file, but not stdout
     if opts.output:
