@@ -2,20 +2,23 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1.11.3 (2018-03-28)
+1.12.1 (2018-03-28)
 -------------------
-* extend list of allowed python builtins: min, max, round
+* `#183 <https://github.com/ros/xacro/issues/183>`_: unicode support for python2 and python3
+* `#178 <https://github.com/ros/xacro/issues/178>`_: extend list of allowed python builtins: min, max, round
+* `#182 <https://github.com/ros/xacro/issues/182>`_: suppress xacro warnings when determining dependencies
+* `#151 <https://github.com/ros/xacro/issues/151>`_: fixes for `#149 <https://github.com/ros/xacro/issues/149>`_ and `#148 <https://github.com/ros/xacro/issues/148>`_
+* `#157 <https://github.com/ros/xacro/issues/157>`_: fix `#156 <https://github.com/ros/xacro/issues/156>`_ access to undefined target_table
+* `#150 <https://github.com/ros/xacro/issues/150>`_: allow True/False literals in python expressions
+* `#159 <https://github.com/ros/xacro/issues/159>`_: load ROS-related packages on demand, thus becoming more independent from ROS
 * `#173 <https://github.com/ros/xacro/issues/173>`_: allow default values for properties
 * `#172 <https://github.com/ros/xacro/issues/172>`_: fix formatting of XacroException
-* `#182 <https://github.com/ros/xacro/issues/182>`_: suppress xacro warnings when determining dependencies
 * `#171 <https://github.com/ros/xacro/issues/171>`_: fix dependency handling (--deps option)
-  * allow to specify extra dependencies for xacro_add_xacro_file(s)
-  * consider yaml files loaded with load_yaml
-* fixes for `#148 <https://github.com/ros/xacro/issues/148>`_ and `#149 <https://github.com/ros/xacro/issues/149>`_
-* fix `#156 <https://github.com/ros/xacro/issues/156>`_: avoid access to undefined variable target_table
-* fix `#148 <https://github.com/ros/xacro/issues/148>`_: silently ignore extra attributes that are namespace specifiers
-* allow True/False literals in python expressions
-* Contributors: Robert Haschke, Morgan Quigley, Steven Peters
+* `#163 <https://github.com/ros/xacro/issues/163>`_: full python 3 compatibility
+* Contributors: Robert Haschke, Kartik Mohta, Morgan Quigley, Steven Peters
+
+1.12.0 (2017-03-25)
+-------------------
 
 1.11.2 (2017-02-27)
 -------------------
