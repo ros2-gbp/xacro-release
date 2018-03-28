@@ -607,6 +607,21 @@ class TestXacro(TestXacroCommentsIgnored):
     <b />
 </robot>''')
 
+    def test_boolean_if_statement(self):
+        self.assert_matches(
+                self.quick_xacro('''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="condT" value="${True}"/>
+  <xacro:property name="condF" value="${False}"/>
+  <xacro:if value="${condF}"><a /></xacro:if>
+  <xacro:if value="${condT}"><b /></xacro:if>
+  <xacro:if value="${True}"><c /></xacro:if>
+</robot>'''),
+                '''\
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+    <b /><c />
+</robot>''')
+
     def test_consecutive_if(self):
         self.assert_matches(self.quick_xacro('''
 <a xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -1133,6 +1148,24 @@ class TestXacroInorder(TestXacro):
             self.assertTrue("Document is incompatible to --inorder processing." in output)
             self.assertTrue("foo" in output)  # foo should be reported
             self.assertTrue("bar" not in output)  # bar shouldn't be reported
+
+    def test_default_property(self):
+        src = '''
+        <a xmlns:xacro="http://www.ros.org/xacro">
+            <xacro:property name="prop" default="false"/>
+            <xacro:unless value="${prop}">
+                <foo/>
+                <xacro:property name="prop" value="true"/>
+            </xacro:unless>
+
+            <!-- second foo should be ignored -->
+            <xacro:unless value="${prop}">
+                <foo/>
+                <xacro:property name="prop" value="true"/>
+            </xacro:unless>
+        </a>'''
+        res = '''<a xmlns:xacro="http://www.ros.org/xacro"><foo/></a>'''
+        self.assert_matches(self.quick_xacro(src), res)
 
 
 if __name__ == '__main__':
