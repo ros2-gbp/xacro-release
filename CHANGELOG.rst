@@ -2,14 +2,10 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1.13.1 (2018-05-03)
+1.12.2 (2018-05-03)
 -------------------
 * fix parsing of quoted strings in default args for xacro params (`#187 <https://github.com/ros/xacro/issues/187>`_)
-* Contributors: Robert Haschke
-
-1.13.0 (2018-03-31)
--------------------
-* make --inorder processing the default
+* fix xacro-cmake test
 * Contributors: Robert Haschke
 
 1.12.1 (2018-03-28)
