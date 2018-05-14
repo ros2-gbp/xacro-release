@@ -2,10 +2,20 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-1.12.2 (2018-05-03)
+1.13.2 (2018-05-14)
+-------------------
+* deprecate --includes option (which is tied to deprecated --legacy processing)
+* moved all option handling to cli.py, including deprecation warnings for options
+* Contributors: Robert Haschke
+
+1.13.1 (2018-05-03)
 -------------------
 * fix parsing of quoted strings in default args for xacro params (`#187 <https://github.com/ros/xacro/issues/187>`_)
-* fix xacro-cmake test
+* Contributors: Robert Haschke
+
+1.13.0 (2018-03-31)
+-------------------
+* make --inorder processing the default
 * Contributors: Robert Haschke
 
 1.12.1 (2018-03-28)
