@@ -112,7 +112,7 @@ def load_yaml(filename):
 # taking simple security measures to forbid access to __builtins__
 # only the very few symbols explicitly listed are allowed
 # for discussion, see: http://nedbatchelder.com/blog/201206/eval_really_is_dangerous.html
-global_symbols = {'__builtins__': {k: __builtins__[k] for k in ['list', 'dict', 'map', 'str', 'float', 'int', 'True', 'False', 'min', 'max', 'round']}}
+global_symbols = {'__builtins__': {k: __builtins__[k] for k in ['list', 'dict', 'map', 'len', 'str', 'float', 'int', 'True', 'False', 'min', 'max', 'round']}}
 # also define all math symbols and functions
 global_symbols.update(math.__dict__)
 # allow to import dicts from yaml
@@ -182,12 +182,12 @@ def eval_extension(s):
     if s == '$(cwd)':
         return os.getcwd()
     try:
-        from roslaunch import substitution_args
+        from roslaunch.substitution_args import resolve_args, ArgException
         from rospkg.common import ResourceNotFound
-        return substitution_args.resolve_args(s, context=substitution_args_context, resolve_anon=False)
+        return resolve_args(s, context=substitution_args_context, resolve_anon=False)
     except ImportError as e:
         raise XacroException("substitution args not supported: ", exc=e)
-    except substitution_args.ArgException as e:
+    except ArgException as e:
         raise XacroException("Undefined substitution argument", exc=e)
     except ResourceNotFound as e:
         raise XacroException("resource not found:", exc=e)
@@ -807,8 +807,17 @@ def eval_all(node, macros, symbols):
     """Recursively evaluate node, expanding macros, replacing properties, and evaluating expressions"""
     # evaluate the attributes
     for name, value in node.attributes.items():
-        result = unicode(eval_text(value, symbols))
-        node.setAttribute(name, result)
+        if name.startswith('xacro:'):  # remove xacro:* attributes
+            node.removeAttribute(name)
+        else:
+            result = unicode(eval_text(value, symbols))
+            node.setAttribute(name, result)
+
+    # remove xacro namespace definition
+    try:
+        node.removeAttribute('xmlns:xacro')
+    except xml.dom.NotFoundErr:
+        pass
 
     node = node.firstChild
     while node:
@@ -963,6 +972,12 @@ def process_doc(doc,
         process_includes(doc.documentElement)
         grab_macros(doc, macros)
         grab_properties(doc, symbols)
+
+    # apply xacro:targetNamespace as global xmlns (if defined)
+    targetNS = doc.documentElement.getAttribute('xacro:targetNamespace')
+    if targetNS:
+        doc.documentElement.removeAttribute('xacro:targetNamespace')
+        doc.documentElement.setAttribute('xmlns', targetNS)
 
     eval_all(doc.documentElement, macros, symbols)
 
