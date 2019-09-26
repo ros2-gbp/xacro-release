@@ -1,3 +1,26 @@
+## xacro (melodic) - 1.13.4-1
+
+The packages in the `xacro` repository were released into the `melodic` distro by running `/usr/local/bin/bloom-release xacro --rosdistro melodic` on `Thu, 26 Sep 2019 06:48:26 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: https://github.com/ros-gbp/xacro-release.git
+- rosdistro version: `1.13.3-0`
+- old version: `1.13.3-0`
+- new version: `1.13.4-1`
+
+Versions of tools used:
+
+- bloom version: `0.8.0`
+- catkin_pkg version: `0.4.13`
+- rosdep version: `0.16.1`
+- rosdistro version: `0.7.4`
+- vcstools version: `0.1.42`
+
+
 ## xacro (melodic) - 1.13.3-0
 
 The packages in the `xacro` repository were released into the `melodic` distro by running `/usr/bin/bloom-release xacro --rosdistro melodic` on `Sun, 14 Oct 2018 14:49:29 -0000`
