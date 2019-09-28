@@ -1,3 +1,26 @@
+## xacro (dashing) - 2.0.0-1
+
+The packages in the `xacro` repository were released into the `dashing` distro by running `/usr/local/bin/bloom-release xacro --rosdistro dashing` on `Sat, 28 Sep 2019 04:42:12 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: unknown
+- rosdistro version: `null`
+- old version: `null`
+- new version: `2.0.0-1`
+
+Versions of tools used:
+
+- bloom version: `0.8.0`
+- catkin_pkg version: `0.4.13`
+- rosdep version: `0.16.1`
+- rosdistro version: `0.7.4`
+- vcstools version: `0.1.42`
+
+
 ## xacro (crystal) - 2.0.0-1
 
 The packages in the `xacro` repository were released into the `crystal` distro by running `/usr/local/bin/bloom-release xacro --rosdistro crystal` on `Sat, 28 Sep 2019 04:27:20 -0000`
