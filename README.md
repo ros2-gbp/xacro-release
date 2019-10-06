@@ -1,3 +1,26 @@
+## xacro (eloquent) - 2.0.1-1
+
+The packages in the `xacro` repository were released into the `eloquent` distro by running `/usr/bin/bloom-release xacro --rosdistro eloquent` on `Sun, 06 Oct 2019 05:56:22 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: unknown
+- rosdistro version: `null`
+- old version: `null`
+- new version: `2.0.1-1`
+
+Versions of tools used:
+
+- bloom version: `0.8.0`
+- catkin_pkg version: `0.4.13`
+- rosdep version: `0.16.1`
+- rosdistro version: `0.7.4`
+- vcstools version: `0.1.42`
+
+
 ## xacro (crystal) - 2.0.1-1
 
 The packages in the `xacro` repository were released into the `crystal` distro by running `/usr/bin/bloom-release xacro --rosdistro crystal` on `Sun, 06 Oct 2019 05:50:23 -0000`
