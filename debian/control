@@ -1,0 +1,13 @@
+Source: ros-crystal-xacro
+Section: misc
+Priority: extra
+Maintainer: Robert Haschke <rhaschke@techfak.uni-bielefeld.de>
+Build-Depends: debhelper (>= 9.0.0), python3-yaml, ros-crystal-ament-cmake, ros-crystal-ament-cmake-pytest, ros-crystal-ament-index-python, ros-crystal-ament-lint-auto, ros-crystal-ros-workspace
+Homepage: http://ros.org/wiki/xacro
+Standards-Version: 3.9.2
+
+Package: ros-crystal-xacro
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3-yaml, ros-crystal-ament-index-python, ros-crystal-ros-workspace
+Description: Xacro (XML Macros) Xacro is an XML macro language.
+ With xacro, you can construct shorter and more readable XML files by using macros that expand to larger XML expressions.
