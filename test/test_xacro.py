@@ -203,7 +203,7 @@ class TestXacroFunctions(unittest.TestCase):
 
     def test_resolve_macro(self):
         # define three nested macro dicts with the same macro names (keys)
-        content = {'xacro:simple': 'simple'}
+        content = {'simple': 'simple'}
         ns2 = dict({k: v+'2' for k,v in content.items()})
         ns1 = dict({k: v+'1' for k,v in content.items()})
         ns1.update(ns2=ns2)
@@ -213,10 +213,6 @@ class TestXacroFunctions(unittest.TestCase):
         self.assertEqual(xacro.resolve_macro('simple', macros), 'simple')
         self.assertEqual(xacro.resolve_macro('ns1.simple', macros), 'simple1')
         self.assertEqual(xacro.resolve_macro('ns1.ns2.simple', macros), 'simple2')
-
-        self.assertEqual(xacro.resolve_macro('xacro:simple', macros), 'simple')
-        self.assertEqual(xacro.resolve_macro('xacro:ns1.simple', macros), 'simple1')
-        self.assertEqual(xacro.resolve_macro('xacro:ns1.ns2.simple', macros), 'simple2')
 
     def check_macro_arg(self, s, param, forward, default, rest):
         p, v, r = xacro.parse_macro_arg(s)
@@ -324,7 +320,7 @@ class TestXacro(TestXacroCommentsIgnored):
         # res = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro"><a name="foo"/></a>'''
         with capture_stderr(self.quick_xacro, src) as (result, output):
             self.assert_matches(result, res)
-            self.assertTrue("deprecated use of macro name 'call'" in output)
+            self.assertTrue("deprecated use of 'call' as macro name" in output)
 
     def test_dynamic_macro_undefined(self):
         self.assertRaises(xacro.XacroException,
@@ -396,7 +392,7 @@ class TestXacro(TestXacroCommentsIgnored):
     def test_evaluate_macro_params_before_body(self):
         self.assert_matches(self.quick_xacro('''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:macro name="foo" params="lst">${lst[-1]}</xacro:macro>
-  <foo lst="${[1,2,3]}"/></a>'''),
+  <xacro:foo lst="${[1,2,3]}"/></a>'''),
         '''<a>3</a>''')
 
     def test_macro_params_escaped_string(self):
@@ -561,7 +557,7 @@ class TestXacro(TestXacroCommentsIgnored):
   <xacro:property name="var" value="main"/>
   <xacro:include filename="include1.xacro" ns="A"/>
   <xacro:include filename="include2.xacro" ns="B"/>
-  <A.foo/><B.foo/>
+  <xacro:A.foo/><B.foo/>
   <main var="${var}" A="${2*A.var}" B="${B.var+1}"/>
 </a>'''
         result = '''
@@ -1037,7 +1033,9 @@ class TestXacro(TestXacroCommentsIgnored):
         <xacro:my_macro/>
         </a>'''
         res = '''<a><foo/></a>'''
-        self.assert_matches(self.quick_xacro(src), res)
+        with capture_stderr(self.quick_xacro, src) as (result, output):
+            self.assert_matches(result, res)
+            self.assertTrue("macro names must not contain prefix 'xacro:'" in output)
 
     def test_overwrite_globals(self):
         src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -1052,7 +1050,7 @@ class TestXacro(TestXacroCommentsIgnored):
   <xacro:macro name="foo" params="a b:=${a} c:=$${a}"> a=${a} b=${b} c=${c} </xacro:macro>
   <xacro:property name="a" value="1"/>
   <xacro:property name="d" value="$${a}"/>
-  <d d="${d}"><foo a="2"/></d>
+  <d d="${d}"><xacro:foo a="2"/></d>
 </a>'''
         res = '''<a><d d="${a}"> a=2 b=1 c=${a} </d></a>'''
         self.assert_matches(self.quick_xacro(src), res)
@@ -1108,6 +1106,18 @@ class TestXacroInorder(TestXacro):
     <xacro:include file="$(find nonexistent_package)/stuff.urdf" />
   </xacro:if>
 </a>'''), '<a/>')
+
+    def test_include_from_macro(self):
+        src = '''
+    <a xmlns:xacro="http://www.ros.org/xacro">
+      <xacro:macro name="foo" params="file:=include1.xml"><xacro:include filename="${file}"/></xacro:macro>
+      <xacro:foo/>
+      <xacro:foo file="${abs_filename('include1.xml')}"/>
+      <xacro:include filename="subdir/foo.xacro"/>
+      <xacro:foo file="$(cwd)/subdir/include1.xml"/>
+    </a>'''
+        res = '''<a><inc1/><inc1/><subdir_inc1/><subdir_inc1/></a>'''
+        self.assert_matches(self.quick_xacro(src), res)
 
     def test_yaml_support(self):
         src = '''
@@ -1229,6 +1239,21 @@ ${u'🍔' * how_many}
         self.assert_matches(xml.dom.minidom.parse(output_path),
             '''<robot>🍔</robot>''')
         shutil.rmtree(tmp_dir_name) # clean up after ourselves
+
+    def test_macro_name_clash(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+<xacro:macro name="foo"><bar/></xacro:macro>
+<foo/></a>
+'''
+        self.assert_matches(self.quick_xacro(src, ['--xacro-ns']), '<a><foo/></a>')
+        self.assert_matches(self.quick_xacro(src), '<a><bar/></a>')
+
+    def test_invalid_syntax(self):
+        self.assertRaises(xacro.XacroException, self.quick_xacro, '<a>a${</a>')
+        self.assertRaises(xacro.XacroException, self.quick_xacro, '<a>${b</a>')
+        self.assertRaises(xacro.XacroException, self.quick_xacro, '<a>${{}}</a>')
+        self.assertRaises(xacro.XacroException, self.quick_xacro, '<a>a$(</a>')
+        self.assertRaises(xacro.XacroException, self.quick_xacro, '<a>$(b</a>')
 
 if __name__ == '__main__':
     unittest.main()
