@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+# Copyright (c) 2015, Open Source Robotics Foundation, Inc.
 # Copyright (c) 2013, Willow Garage, Inc.
 # All rights reserved.
 #
@@ -10,9 +11,9 @@
 #     * Redistributions in binary form must reproduce the above copyright
 #       notice, this list of conditions and the following disclaimer in the
 #       documentation and/or other materials provided with the distribution.
-#     * Neither the name of the Willow Garage, Inc. nor the names of its
-#       contributors may be used to endorse or promote products derived from
-#       this software without specific prior written permission.
+#     * Neither the name of the Open Source Robotics Foundation, Inc. nor the
+#       names of its contributors may be used to endorse or promote products
+#       derived from this software without specific prior written permission.
 #
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
@@ -26,8 +27,38 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 
-# Author: Stuart Glaser
-# Maintainer: William Woodall <wwoodall@willowgarage.com>
+# Authors: Stuart Glaser, William Woodall, Robert Haschke
+# Maintainer: Morgan Quigley <morgan@osrfoundation.org>
+
+#### READ THIS! THIS FILE ONLY FOR BACKWARDS COMPATIBILITY!!!!!!
+#
+# this script is just for backwards compatibility. the roslaunch $(find ...)
+# expects the script to be in the package directory, and in catkin
+# the package direcory is the share directory. going forward, we should
+# transition to scripts/xacro
+
+from __future__ import print_function
+
+# Guard against self import
+import os
+import sys
+backup_path = list(sys.path)
+this_dir = os.path.dirname(__file__)
+# Use os.getcwd() to avoid weird symbolic link problems
+cur_dir = os.getcwd()
+os.chdir(this_dir)
+this_dir_cwd = os.getcwd()
+os.chdir(cur_dir)
+# Remove this dir from path
+sys.path = [a for a in sys.path if a not in [this_dir, this_dir_cwd]]
 
 import xacro
+from xacro.color import warning
+
+# Restore the path
+sys.path = backup_path
+
 xacro.main()
+
+# issue deprecation warning
+warning('xacro.py is deprecated; please use xacro instead')

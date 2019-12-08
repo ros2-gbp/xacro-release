@@ -2,42 +2,22 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-2.0.1 (2019-10-06)
-------------------
-* Revert requiring that all xacro commands are prefixed with 'xacro:' namespace
-  Although this is deprecated since `#79 <https://github.com/ros/xacro/issues/79>`_,
-  the corresponding deprecation warning wasn't actually issued.
-  Thus, we will accept non-prefixed xacro tags until F-turtle.
-* Install to both, bin/xacro and lib/xacro/xacro
+1.13.5 (2019-12-08)
+-------------------
+* [feature] Expose abs_filename() (`#220 <https://github.com/ros/xacro/issues/220>`_)
+* [feature] Catch missing closing brace in $() and ${} expressions
+* [maintanence]
+  - Replace deprecated yaml.load() -> yaml.safe_load()
+  - Save macro names internally w/o 'xacro:' prefix
+  - Correctly issue deprecation warning for non-prefixed xacro tags
 * Contributors: Robert Haschke
-
-2.0.0 (2019-09-28)
-------------------
-* PEP8 cleanup
-  - code simplifications
-  - avoid empty except
-  - sort imports
-  - format line breaks
-* Code cleanup
-  - Removed deprecated options --legacy, --inorder, --check-order, --includes
-  - Require all xacro commands to be prefixed with 'xacro:'
-  - Added missing copyright notices
-  - Removed python2 stuff
-* Adapt Travis config to use colcon
-* Provide ROS2-based replacement for substition args
-* Modified package structure as per ROS2 rules
-  - Using ament_cmake
-  - Moved source contents from "src/xacro" to "xacro"
-  - Modified package.xml and setup.py according to ROS2 requirements
-  - Configured completion hook
-  - Removed catkin artifacts from cmake extension
-* Contributors: vandanamandlik, Jacob Perron, Robert Haschke
 
 1.13.4 (2019-09-26)
 -------------------
 * [feature] remove xmlns:xacro from processed file (`#207 <https://github.com/ros/xacro/issues/207>`_)
   - Remove all notions of xmlns:xacro from the resulting document.
-  - If the root node defines a xacro:targetNamespace attribute, this will become the global xmlns namespace of the resulting document.
+  - If the root node defines a xacro:targetNamespace attribute,
+    this will become the global xmlns namespace of the resulting document.
 * [feature] Add len() to allowed python functions (`#208 <https://github.com/ros/xacro/issues/208>`_)
 * [maintanence]
   - --in-order warning: reduce severity level to message
