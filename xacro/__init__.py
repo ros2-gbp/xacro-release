@@ -94,7 +94,7 @@ def load_yaml(filename):
     f = open(filename)
     oldstack = push_file(filename)
     try:
-        return yaml.load(f)
+        return yaml.safe_load(f)
     finally:
         f.close()
         restore_filestack(oldstack)
@@ -111,8 +111,8 @@ global_symbols = {'__builtins__': {k: __builtins__[k] for k in
                                     'True', 'False', 'min', 'max', 'round']}}
 # also define all math symbols and functions
 global_symbols.update(math.__dict__)
-# allow to import dicts from yaml
-global_symbols.update(dict(load_yaml=load_yaml))
+# expose load_yaml and abs_filename
+global_symbols.update(dict(load_yaml=load_yaml, abs_filename=abs_filename_spec))
 
 
 class XacroException(Exception):
@@ -134,8 +134,10 @@ class XacroException(Exception):
 
 
 verbosity = 1
+
+
 # deprecate non-namespaced use of xacro tags (issues #41, #59, #60)
-def deprecated_tag(tag_name = None, _issued=[False]):
+def deprecated_tag(tag_name=None, _issued=[False]):
     if _issued[0]:
         return
 
@@ -319,13 +321,15 @@ class QuickLexer(object):
     def next(self):
         result = self.top
         self.top = None
+        if not self.str:  # empty string
+            return result
         for i in range(len(self.res)):
             m = self.res[i].match(self.str)
             if m:
                 self.top = (i, m.group(0))
                 self.str = self.str[m.end():]
-                break
-        return result
+                return result
+        raise XacroException('invalid expression: ' + self.str)
 
 
 all_includes = []
@@ -394,7 +398,7 @@ def import_xml_namespaces(parent, attributes):
 
 def process_include(elt, macros, symbols, func):
     included = []
-    filename_spec, namespace_spec = check_attrs(elt, ['filename'], ['ns'])
+    filename_spec, namespace_spec, optional = check_attrs(elt, ['filename'], ['ns', 'optional'])
     if namespace_spec:
         try:
             namespace_spec = eval_text(namespace_spec, symbols)
@@ -405,18 +409,26 @@ def process_include(elt, macros, symbols, func):
         except TypeError:
             raise XacroException('namespaces are supported with in-order option only')
 
+    optional = get_boolean_value(optional, None)
+
     for filename in get_include_files(filename_spec, symbols):
-        # extend filestack
-        oldstack = push_file(filename)
-        include = parse(None, filename).documentElement
+        try:
+            # extend filestack
+            oldstack = push_file(filename)
+            include = parse(None, filename).documentElement
 
-        # recursive call to func
-        func(include, macros, symbols)
-        included.append(include)
-        import_xml_namespaces(elt.parentNode, include.attributes)
-
-        # restore filestack
-        restore_filestack(oldstack)
+            # recursive call to func
+            func(include, macros, symbols)
+            included.append(include)
+            import_xml_namespaces(elt.parentNode, include.attributes)
+        except XacroException as e:
+            if e.exc and isinstance(e.exc, IOError) and optional is True:
+                continue
+            else:
+                raise
+        finally:
+            # restore filestack
+            restore_filestack(oldstack)
 
     remove_previous_comments(elt)
     # replace the include tag with the nodes of the included file(s)
@@ -609,7 +621,7 @@ def handle_dynamic_macro_call(node, macros, symbols):
     node.tagName = 'xacro:' + name
     # forward to handle_macro_call
     try:
-    	return handle_macro_call(node, macros, symbols)
+        return handle_macro_call(node, macros, symbols)
     except KeyError:
         raise XacroException("unknown macro name '%s' in xacro:call" % name)
 
@@ -660,7 +672,7 @@ def handle_macro_call(node, macros, symbols):
     params = m.params[:]  # deep copy macro's params list
     for name, value in node.attributes.items():
         if name not in params:
-            raise XacroException("Invalid parameter \"%s\"" % str(name), macro=m)
+            raise XacroException("Invalid parameter '%s'" % str(name), macro=m)
         params.remove(name)
         scoped._setitem(name, eval_text(value, symbols), unevaluated=False)
         node.setAttribute(name, "")  # suppress second evaluation in eval_all()
@@ -679,7 +691,7 @@ def handle_macro_call(node, macros, symbols):
             block = next_sibling_element(block)
 
     if block is not None:
-        raise XacroException("Unused block \"%s\"" % block.tagName, macro=m)
+        raise XacroException("Unused block '%s'" % block.tagName, macro=m)
 
     # Try to load defaults for any remaining non-block parameters
     for param in params[:]:
@@ -735,7 +747,7 @@ def get_boolean_value(value, condition):
         else:
             return bool(value)
     except Exception:
-        raise XacroException("Xacro conditional \"%s\" evaluated to \"%s\", "
+        raise XacroException("Xacro conditional '%s' evaluated to '%s', "
                              "which is not a boolean expression." % (condition, value))
 
 
@@ -796,7 +808,7 @@ def eval_all(node, macros, symbols):
                     block = symbols['*' + name]
                     content_only = False
                 else:
-                    raise XacroException("Undefined block \"%s\"" % name)
+                    raise XacroException("Undefined block '%s'" % name)
 
                 # cloning block allows to insert the same block multiple times
                 block = block.cloneNode(deep=True)
@@ -888,7 +900,7 @@ def parse(inp, filename=None):
         except IOError as e:
             # do not report currently processed file as "in file ..."
             filestack.pop()
-            raise XacroException(e.strerror + ": " + e.filename)
+            raise XacroException(e.strerror + ": " + e.filename, exc=e)
 
     try:
         if isinstance(inp, str):
@@ -989,25 +1001,25 @@ def process_file(input_file_name, **kwargs):
     return doc
 
 
-def main():
-    opts, input_file_name = process_args(sys.argv[1:])
+def _process(input_file_name, opts):
     try:
         # open and process file
-        doc = process_file(input_file_name, **vars(opts))
+        doc = process_file(input_file_name, **opts)
         # open the output file
-        out = open_output(opts.output)
+        out = open_output(opts['output'])
 
     # error handling
     except xml.parsers.expat.ExpatError as e:
-        error("XML parsing error: %s" % str(e), alt_text=None)
+        error('XML parsing error: %s' % str(e), alt_text=None)
         if verbosity > 0:
             print_location(filestack, e)
             print(file=sys.stderr)  # add empty separator line before error
-            print("Check that:", file=sys.stderr)
-            print(" - Your XML is well-formed", file=sys.stderr)
-            print(" - You have the xacro xmlns declaration:",
-                  "xmlns:xacro=\"http://www.ros.org/wiki/xacro\"", file=sys.stderr)
-        sys.exit(2)  # indicate failure, but don't print stack trace on XML errors
+            print('Check that:', file=sys.stderr)
+            print(' - Your XML is well-formed', file=sys.stderr)
+            print(' - You have the xacro xmlns declaration:',
+                  'xmlns:xacro="http://www.ros.org/wiki/xacro"', file=sys.stderr)
+        # indicate failure, but don't print stack trace on XML errors
+        sys.exit(2)
 
     except Exception as e:
         msg = str(e)
@@ -1022,15 +1034,27 @@ def main():
         else:
             sys.exit(2)  # gracefully exit with error condition
 
-    # special output mode
-    if opts.just_deps:
-        out.write(" ".join(set(all_includes)))
-        print()
-        return
+    if opts['just_deps']:  # only output list of dependencies
+        out.write(' '.join(set(all_includes)))
+    else:  # write XML output
+        out.write(doc.toprettyxml(indent='  '))
 
-    # write output
-    out.write(doc.toprettyxml(indent='  '))
-    print()
     # only close output file, but not stdout
-    if opts.output:
+    if opts['output']:
         out.close()
+
+
+def process(input_file_name, just_deps=False, xacro_ns=True, verbosity=1, mappings={}):
+    """Function to be used from python code, returning the processed XML"""
+    from io import StringIO
+    old, sys.stdout = sys.stdout, StringIO()  # temporarily replace sys.stdout with StringIO()
+    _process(input_file_name, dict(output=None, just_deps=just_deps, xacro_ns=xacro_ns, verbosity=verbosity, mappings=mappings))
+    sys.stdout.seek(0)
+    result = sys.stdout.read()
+    sys.stdout = old  # restore sys.stdout
+    return result
+
+
+def main():
+    opts, input_file_name = process_args(sys.argv[1:])
+    _process(input_file_name, vars(opts))
