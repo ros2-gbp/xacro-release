@@ -1,3 +1,26 @@
+## xacro (dashing) - 2.0.2-1
+
+The packages in the `xacro` repository were released into the `dashing` distro by running `/usr/bin/bloom-release --ros-distro dashing xacro` on `Sun, 29 Mar 2020 16:10:48 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: https://github.com/ros-gbp/xacro-release.git
+- rosdistro version: `2.0.1-2`
+- old version: `2.0.1-2`
+- new version: `2.0.2-1`
+
+Versions of tools used:
+
+- bloom version: `0.9.3`
+- catkin_pkg version: `0.4.16`
+- rosdep version: `0.18.0`
+- rosdistro version: `0.8.0`
+- vcstools version: `0.1.42`
+
+
 ## xacro (noetic) - 1.14.1-1
 
 The packages in the `xacro` repository were released into the `noetic` distro by running `/usr/bin/bloom-release --ros-distro noetic xacro` on `Sun, 29 Mar 2020 15:22:37 -0000`
