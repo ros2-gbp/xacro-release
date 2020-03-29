@@ -62,6 +62,36 @@ class IndentedHelpFormatterWithNL(IndentedHelpFormatter):
         return result
 
 
+# copied from rosgraph.names
+REMAP = ":="
+
+
+def load_mappings(argv):
+    """
+    Load name mappings encoded in command-line arguments. This will filter
+    out any parameter assignment mappings.
+
+    @param argv: command-line arguments
+    @type  argv: [str]
+    @return: name->name remappings.
+    @rtype: dict {str: str}
+    """
+    mappings = {}
+    for arg in argv:
+        if REMAP in arg:
+            try:
+                src, dst = [x.strip() for x in arg.split(REMAP)]
+                if src and dst:
+                    if len(src) > 1 and src[0] == '_' and src[1] != '_':
+                        # ignore parameter assignment mappings
+                        pass
+                    else:
+                        mappings[src] = dst
+            except Exception:
+                raise RuntimeError("Invalid remapping argument '%s'\n" % arg)
+    return mappings
+
+
 def process_args(argv, require_input=True):
     parser = ColoredOptionParser(usage="usage: %prog [options] <input>",
                                  formatter=IndentedHelpFormatterWithNL())
@@ -69,6 +99,8 @@ def process_args(argv, require_input=True):
                       help="write output to FILE instead of stdout")
     parser.add_option("--deps", action="store_true", dest="just_deps",
                       help="print file dependencies")
+    parser.add_option("--xacro-ns", action="store_false", default=True, dest="xacro_ns",
+                      help="require xacro namespace prefix for xacro tags")
     parser.add_option("--inorder", "-i", action="store_true", dest="in_order",
                       help="processing in read order (default, can be omitted)")
 
@@ -88,7 +120,6 @@ def process_args(argv, require_input=True):
 
     # process substitution args
     try:
-        from rosgraph.names import load_mappings, REMAP
         mappings = load_mappings(argv)
         filtered_args = [a for a in argv if REMAP not in a]  # filter-out REMAP args
     except ImportError as e:
@@ -96,7 +127,7 @@ def process_args(argv, require_input=True):
         mappings = {}
         filtered_args = argv
 
-    parser.set_defaults(just_deps=False, just_includes=False, verbosity=1)
+    parser.set_defaults(just_deps=False, verbosity=1)
     (options, pos_args) = parser.parse_args(filtered_args)
     if options.in_order:
         message("xacro: in-order processing became default in ROS Melodic. You can drop the option.")
