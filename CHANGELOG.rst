@@ -2,6 +2,11 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.0.2 (2020-03-29)
+------------------
+* Merge improvements of melodic and noetic branches into dashing-devel: see 1.14.1, 1.13.5 for details
+* Contributors: Robert Haschke
+
 2.0.1 (2019-10-06)
 ------------------
 * Revert requiring that all xacro commands are prefixed with 'xacro:' namespace
@@ -32,6 +37,21 @@ Changelog for package xacro
   - Configured completion hook
   - Removed catkin artifacts from cmake extension
 * Contributors: vandanamandlik, Jacob Perron, Robert Haschke
+
+1.14.1 (2020-03-29)
+-------------------
+* [feature]     allow optional xacro includes (`#234 <https://github.com/ros/xacro/issues/234>`_)
+* Contributors: Robert Haschke
+
+1.13.5 (2019-12-08)
+-------------------
+* [feature] Expose abs_filename() (`#220 <https://github.com/ros/xacro/issues/220>`_)
+* [feature] Catch missing closing brace in $() and ${} expressions
+* [maintanence]
+  - Replace deprecated yaml.load() -> yaml.safe_load()
+  - Save macro names internally w/o 'xacro:' prefix
+  - Correctly issue deprecation warning for non-prefixed xacro tags
+* Contributors: Robert Haschke
 
 1.13.4 (2019-09-26)
 -------------------
