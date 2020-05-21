@@ -1,28 +1,25 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.0.2)
 project(xacro)
 
-find_package(ament_cmake REQUIRED)
+find_package(catkin REQUIRED COMPONENTS roslint)
 
-install(FILES scripts/completion.bash DESTINATION share/${PROJECT_NAME}/environment)
+catkin_package(
+  CFG_EXTRAS xacro-extras.cmake
+)
 
-## The following manually installs the python package and the entry-point script
-## Using ament_cmake, we cannot actually use setup.py to install these...
+## Uncomment this if the package has a setup.py. This macro ensures
+## modules and global scripts declared therein get installed
+## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
+catkin_python_setup()
 
-# install xacro python package
-ament_python_install_package(xacro)
-# install main script
-install(PROGRAMS scripts/xacro DESTINATION bin)
-install(PROGRAMS scripts/xacro DESTINATION lib/${PROJECT_NAME})
+catkin_install_python(PROGRAMS scripts/xacro
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION})
 
-if(BUILD_TESTING)
-  ## run linters as defined in package.xml
-  find_package(ament_lint_auto REQUIRED)
-  ament_lint_auto_find_test_dependencies()
-
+if(CATKIN_ENABLE_TESTING)
+  ## Add folders to be run by python nosetests
+  catkin_add_nosetests(test)
   ## add tests for xacro's cmake functions
   add_subdirectory(test)
 endif()
 
-ament_package(
-  CONFIG_EXTRAS cmake/xacro-extras.cmake
-)
+roslint_python()

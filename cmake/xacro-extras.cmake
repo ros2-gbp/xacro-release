@@ -1,3 +1,6 @@
+add_custom_target(${PROJECT_NAME}_xacro_generated_to_devel_space_ ALL)
+
+
 ## xacro_add_xacro_file(<input> [<output>] [REMAP <arg> <arg> ...]
 ##                      [OUTPUT <variable>] DEPENDS <arg> <arg>)
 ##
@@ -15,8 +18,8 @@
 ## endforeach()
 ## xacro_install(xacro_target ${xacro_outputs} DESTINATION xml)
 ##
-## Alternatively to xacro_install, you can call
-## install(xacro_target ${xacro_outputs} DESTINATION share/${PROJECT_NAME}/xml)
+## Be aware, that xacro_install() is required to install into both, install and devel space.
+## Normal install() only installs into install space!
 ##
 ## For conveniency, you might want to use xacro_add_files(), which does the same:
 ## xacro_add_files(${MY_XACRO_FILES} REMAP bar:=foo foo:=bar
@@ -64,7 +67,7 @@ function(xacro_add_xacro_file input)
 
   ## Call out to xacro to determine dependencies
   message(STATUS "xacro: determining deps for: " ${input} " ...")
-  execute_process(COMMAND xacro --deps ${input} ${_XACRO_REMAP}
+  execute_process(COMMAND ${CATKIN_ENV} xacro --deps ${input} ${_XACRO_REMAP}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     RESULT_VARIABLE _xacro_result
     ERROR_VARIABLE _xacro_err
@@ -79,7 +82,7 @@ ${_xacro_err}")
 
   ## command to actually call xacro
   add_custom_command(OUTPUT ${output}
-    COMMAND xacro -o ${abs_output} ${input} ${_XACRO_REMAP}
+    COMMAND ${CATKIN_ENV} xacro -o ${abs_output} ${input} ${_XACRO_REMAP}
     DEPENDS ${input} ${_xacro_deps_result} ${_XACRO_DEPENDS}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "xacro: generating ${output} from ${input}"
@@ -89,22 +92,53 @@ endfunction(xacro_add_xacro_file)
 
 ## xacro_install(<target> <output> [<output> ...] DESTINATION <path>)
 ##
-## installs xacro-generated files into share/<package>/<path>
+## installs xacro-generated files both to devel and input space
+## into ${CATKIN_PACKAGE_SHARE_DESTINATION}/<path>
 function(xacro_install target)
   # parse arguments
   set(oneValueArgs DESTINATION)
   cmake_parse_arguments(_XACRO "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
   set(outputs ${_XACRO_UNPARSED_ARGUMENTS})
 
+  ## rule to create target dir
+  file(TO_CMAKE_PATH ${CATKIN_PACKAGE_SHARE_DESTINATION}/${_XACRO_DESTINATION} dest)
+  file(TO_CMAKE_PATH ${CATKIN_DEVEL_PREFIX}/${dest} TARGET_DIR)
+  add_custom_command(OUTPUT ${TARGET_DIR}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${TARGET_DIR}
+    COMMENT "creating dir ${TARGET_DIR}")
+
+  ## process list of outputs
+  foreach(output ${outputs})
+    get_filename_component(tgt ${output} NAME)
+    file(TO_CMAKE_PATH ${TARGET_DIR}/${tgt} tgt)
+    list(APPEND tgts ${tgt})
+
+    # rule to create devel space tgt
+    add_custom_command(OUTPUT ${tgt}
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different ${output} ${tgt}
+      DEPENDS ${TARGET_DIR} ${output}
+      COMMENT "Copying to devel space: ${tgt}"
+      )
+  endforeach()
+
+  ## rule to create devel space tgts
+  add_custom_target(${PROJECT_NAME}_${target}_to_devel_space_ DEPENDS ${tgts})
+  # add to main target _xacro_generated_to_devel_space_
+  add_dependencies(${PROJECT_NAME}_xacro_generated_to_devel_space_
+                   ${PROJECT_NAME}_${target}_to_devel_space_)
+
+
   ## normal install
-  install(FILES ${outputs} DESTINATION share/${PROJECT_NAME}/${_XACRO_DESTINATION})
+  install(FILES ${outputs} DESTINATION ${dest})
 endfunction(xacro_install)
 
 
 ## xacro_add_files(<file> [<file> ...] [REMAP <arg> <arg> ...] [DEPENDS <arg> <arg>]
 ##                 [TARGET <target>] [INSTALL [DESTINATION <path>]])
 ##
-## create make <target> to generate xacro files and optionally install to share/<package>/<path>
+## create make <target> to generate xacro files
+## and optionally install to ${CATKIN_PACKAGE_SHARE_DESTINATION}/<path>
+## in devel and install space.
 function(xacro_add_files)
   # parse arguments
   set(options INSTALL)
