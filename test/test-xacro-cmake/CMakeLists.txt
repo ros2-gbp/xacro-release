@@ -1,9 +1,7 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.5)
 project(xacro-test)
 
-find_package(catkin REQUIRED COMPONENTS xacro)
-
-catkin_package()
+find_package(xacro REQUIRED)
 
 ## manual usage of eval
 xacro_add_xacro_file(../include1.xml manual1.xml)
