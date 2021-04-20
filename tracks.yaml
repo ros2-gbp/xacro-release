@@ -120,8 +120,7 @@ tracks:
     ros_distro: galactic
     vcs_type: git
     vcs_uri: https://github.com/ros/xacro.git
-    version: 2.0.2
-    version_saved: :{auto}
+    version: :{auto}
   groovy:
     actions:
     - bloom-export-upstream :{vcs_local_uri} :{vcs_type} --tag :{release_tag} --display-uri
