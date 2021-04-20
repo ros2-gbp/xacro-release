@@ -1,0 +1,13 @@
+Source: ros-galactic-xacro
+Section: misc
+Priority: optional
+Maintainer: Robert Haschke <rhaschke@techfak.uni-bielefeld.de>
+Build-Depends: debhelper (>= 9.0.0), python3-yaml, ros-galactic-ament-cmake, ros-galactic-ament-cmake-pytest, ros-galactic-ament-index-python, ros-galactic-ament-lint-auto, ros-galactic-ros-workspace
+Homepage: http://ros.org/wiki/xacro
+Standards-Version: 3.9.2
+
+Package: ros-galactic-xacro
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3-yaml, ros-galactic-ament-index-python, ros-galactic-ros-workspace
+Description: Xacro (XML Macros) Xacro is an XML macro language.
+ With xacro, you can construct shorter and more readable XML files by using macros that expand to larger XML expressions.
