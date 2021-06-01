@@ -317,7 +317,7 @@ tracks:
       :{release_inc} --os-name fedora
     - git-bloom-generate -y rosrpm --prefix release/:{ros_distro} :{ros_distro} -i
       :{release_inc} --os-name rhel
-    devel_branch: dashing-devel
+    devel_branch: ros2
     last_version: 2.0.2
     name: xacro
     patches: null
