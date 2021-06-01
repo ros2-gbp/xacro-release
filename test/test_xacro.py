@@ -34,6 +34,7 @@
 
 import ast
 from contextlib import contextmanager
+import math
 import os.path
 import re
 import shutil
@@ -189,6 +190,43 @@ def capture_stderr(function, *args, **kwargs):
     sys.stderr.seek(0)
     yield (result, sys.stderr.read())
     sys.stderr = old  # restore sys.stderr
+
+
+class TestTable(unittest.TestCase):
+    def test_top(self):
+        top = xacro.Table()
+        self.assertTrue(top.top() is top)
+
+        sub = xacro.Table(top)
+        self.assertTrue(sub.top() is top)
+
+    def test_contains(self):
+        top = xacro.Table(dict(a=1))
+        self.assertTrue('a' in top)
+
+        self.assertFalse('b' in top)
+        top['b'] = 2
+        self.assertTrue('b' in top)
+
+        sub = xacro.Table(top)
+        sub['c'] = 3
+        for key in ['a', 'b', 'c']:
+            self.assertTrue(key in sub)
+
+    def test_get(self):
+        top = xacro.Table(dict(a=1))
+        self.assertTrue(top['a'] == 1)
+        top['b'] = 2
+        self.assertTrue(top['b'] == 2)
+
+        sub = xacro.Table(top)
+        sub['c'] = 3
+        for i, key in enumerate(['a', 'b', 'c']):
+            self.assertTrue(sub[key] == i+1)
+
+        sub['a'] = 42
+        self.assertTrue(sub['a'] == 42)
+        self.assertTrue(sub.parent['a'] == 1)
 
 
 class TestMatchXML(unittest.TestCase):
@@ -451,6 +489,14 @@ class TestXacro(TestXacroCommentsIgnored):
   </xacro:macro>
   <xacro:foo factor="2"/><a foo="${foo}"/></a>'''
         self.assert_matches(self.quick_xacro(src), '''<a><a foo="42"/></a>''')
+
+    def test_property_in_comprehension(self):
+        src = '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+          <xacro:property name="abc" value="${[1,2,3]}"/>
+          <xacro:property name="xyz" value="${[abc[i]*abc[i] for i in [0,1,2]]}"/>
+          ${xyz}
+        </a>'''
+        self.assert_matches(self.quick_xacro(src), '''<a>[1, 4, 9]</a>''')
 
     def test_math_ignores_spaces(self):
         src = '''<a><f v="${0.9 / 2 - 0.2}" /></a>'''
@@ -944,6 +990,12 @@ class TestXacro(TestXacroCommentsIgnored):
 <a xmlns:xacro="http://www.ros.org/wiki/xacro">
 <xacro:arg name="foo" default=""/>$(arg foo)</a>'''), '''<a/>''')
 
+    def test_broken_include_error_reporting(self):
+        self.assertRaises(xml.parsers.expat.ExpatError, self.quick_xacro,
+        '''<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+           <xacro:include filename="broken.xacro"/></a>''')
+        self.assertEqual(xacro.filestack, [None, './broken.xacro'])
+
     def test_broken_input_doesnt_create_empty_output_file(self):
         # run xacro on broken input file to make sure we don't create an
         # empty output file
@@ -991,6 +1043,18 @@ class TestXacro(TestXacroCommentsIgnored):
 </a>'''), '''
 <a>
   <a list="[0, 2, 2]" tuple="(0, 2, 2)" dict="{'a': 0, 'c': 2, 'b': 2}"/>
+</a>''')
+
+    def test_literals_eval(self):
+        self.assert_matches(self.quick_xacro('''
+<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="f" value="1.23"/>
+  <xacro:property name="i" value="123"/>
+  <xacro:property name="s" value="1_2_3"/>
+  float=${f+1} int=${i+1} string=${s}
+</a>'''), '''
+<a>
+  float=2.23 int=124 string=1_2_3
 </a>''')
 
     def test_enforce_xacro_ns(self):
@@ -1117,6 +1181,15 @@ class TestXacro(TestXacroCommentsIgnored):
         res = '''<a><inc1/><inc1/><subdir_inc1/><subdir_inc1/></a>'''
         self.assert_matches(self.quick_xacro(src), res)
 
+    def test_dotify(self):
+      src = '''
+    <a xmlns:xacro="http://www.ros.org/xacro">
+      <xacro:property name="settings" value="${dotify(dict(a=1, b=2))}"/>
+      ${settings.a + settings.b}
+    </a>'''
+      res = '''<a>3</a>'''
+      self.assert_matches(self.quick_xacro(src), res)
+
     def test_yaml_support(self):
         src = '''
 <a xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -1129,6 +1202,74 @@ class TestXacro(TestXacroCommentsIgnored):
         for i in ['inc1', 'inc2']:
             self.assert_matches(self.quick_xacro(src, cli=['type:=%s' % i]),
                                 res.format(tag=i))
+
+    def test_yaml_support_dotted(self):
+        src = '''
+<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="settings" value="${load_yaml('settings.yaml')}"/>
+  <xacro:property name="type" value="$(arg type)"/>
+  <xacro:include filename="${settings.arms[type].file}"/>
+  <xacro:call macro="${settings.arms[type].macro}"/>
+</a>'''
+        res = '''<a><{tag}/></a>'''
+        for i in ['inc1', 'inc2']:
+            self.assert_matches(self.quick_xacro(src, cli=['type:=%s' % i]),
+                                res.format(tag=i))
+
+    def test_yaml_support_dotted_key_error(self):
+        src = '''
+<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="settings" value="${load_yaml('settings.yaml')}"/>
+  <xacro:property name="bar" value="${settings.baz}"/>
+  ${bar}
+</a>'''
+        self.assertRaises(xacro.XacroException, self.quick_xacro, src)
+
+    def test_yaml_support_dotted_arith(self):
+        src = '''
+<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="settings" value="${load_yaml('settings.yaml')}"/>
+  <xacro:property name="bar" value="${settings.arms.inc2.props.port + 1}"/>
+  ${bar}
+</a>'''
+        res = '''<a>4243</a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_yaml_support_key_in_dict(self):
+        src = '''
+<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="settings" value="${load_yaml('settings.yaml')}"/>
+  ${'arms' in settings} ${'baz' in settings}
+</a>'''
+        res = '''<a>True False</a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_yaml_support_list_of_x(self):
+        src = '''
+    <a xmlns:xacro="http://www.ros.org/wiki/xacro">
+      <xacro:property name="list" value="${load_yaml('list.yaml')}"/>
+      ${list[0][1]} ${list[1][0]} ${list[2].a.A} ${list[2].a.B[0]} ${list[2].a.B[1]} ${list[2].b[0]}
+    </a>'''
+        res = '''<a>A2 B1 1 2 3 4</a>'''
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_yaml_custom_constructors(self):
+        src = '''
+<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="values" value="${load_yaml('constructors.yaml')}"/>
+  <values a="${values.a}" b="${values.b}" c="${values.c}"/>
+</a>'''
+        res = '''<a><values a="{}" b="{}" c="42"/></a>'''.format(math.pi, 0.5*math.pi)
+        self.assert_matches(self.quick_xacro(src), res)
+
+    def test_yaml_custom_constructors_illegal_expr(self):
+        for file in ['constructors_bad1.yaml', 'constructors_bad2.yaml']:
+          src = '''
+<a xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:property name="values" value="${{load_yaml({file})}}"/>
+  <values a="${{values.a}}" />
+</a>'''
+        self.assertRaises(xacro.XacroException, self.quick_xacro, src.format(file=file))
 
     def test_xacro_exist_required(self):
         src = '''
