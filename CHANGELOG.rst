@@ -2,6 +2,27 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.0.6 (2021-05-30)
+------------------
+* [feature] Expose YamlDictWrapper as dotify() to allow dotted access to any dict (`#274 <https://github.com/ros/xacro/issues/274>`_)
+* [fix]     Scoped macro evaluation (`#272 <https://github.com/ros/xacro/issues/272>`_)
+* Contributors: Robert Haschke
+
+2.0.5 (2021-03-02)
+------------------
+* [fix]     Report correct filename for XML errors (`#268 <https://github.com/ros/xacro/issues/268>`_)
+* [fix]     Python3-compatible property Table (`#266 <https://github.com/ros/xacro/issues/266>`_)
+* [fix]     Use outer-scope symbols to resolve include filename in xacro:include (`#264 <https://github.com/ros/xacro/issues/264>`_)
+* [fix]     Append test directory to existing AMENT_PREFIX_PATH (`#260 <https://github.com/ros/xacro/issues/260>`_)
+* [fix]     yaml loading: recursively wrap lists and dicts for dotted dict access (`#258 <https://github.com/ros/xacro/issues/258>`_)
+* [feature] Provide support for yaml constructors !degrees and !radians (`#252 <https://github.com/ros/xacro/issues/252>`_)
+* Contributors: Chen Bainian, Robert Haschke, G.A. vd. Hoorn
+
+2.0.3 (2020-08-09)
+------------------
+* Merge improvements of melodic and noetic branches into dashing-devel: see 1.14.2 and 1.14.3 for details
+* Contributors: Robert Haschke
+
 2.0.2 (2020-03-29)
 ------------------
 * Merge improvements of melodic and noetic branches into dashing-devel: see 1.14.1, 1.13.5 for details
@@ -37,6 +58,27 @@ Changelog for package xacro
   - Configured completion hook
   - Removed catkin artifacts from cmake extension
 * Contributors: vandanamandlik, Jacob Perron, Robert Haschke
+
+1.14.4 (2020-08-09)
+-------------------
+* [fix] Rework YamlDictWrapper to restore dict properties (`#250 <https://github.com/ros/xacro/issues/250>`_)
+* [fix] Ignore underscores when parsing literal numeric values (`#247 <https://github.com/ros/xacro/issues/247>`_)
+* Contributors: Robert Haschke
+
+1.14.3 (2020-07-05)
+-------------------
+* [feature] Improve warnings
+  - Unify meaning of verbosity > 0 (to print file location)
+  - Provide file location on warning in check_attrs()
+  - Issue warning on child elements of <xacro:include> tag
+* [feature] Allow dotted access to yaml-loaded dicts: d.key1.key2.key3 (`#245 <https://github.com/ros/xacro/issues/245>`_)
+* [maint]   Travis: Update distro to Bionic
+* Contributors: Robert Haschke, G.A. vd. Hoorn
+
+1.14.2 (2020-05-21)
+-------------------
+* [maintanence] Remove deprecated xacro.py (`#239 <https://github.com/ros/xacro/issues/239>`_)
+* Contributors: Shane Loretz
 
 1.14.1 (2020-03-29)
 -------------------
@@ -150,7 +192,7 @@ Changelog for package xacro
 -------------------
 * fix #108: evaluate property blocks recursively too
 * improved macro parameter parsing
-* use a regular expression to parse a param spec with forwarding and default 
+* use a regular expression to parse a param spec with forwarding and default
 * allow for spaces in default string (within single quotes)
 * forwarding macro arguments from outer scope
 * switched to `^|` syntax
@@ -208,8 +250,7 @@ Changelog for package xacro
 * replaced debug option by verbosity options -q, -v
 * fixed evaluation time of default macro params
 * introduced Macro object to increase code readability
-* parse a macro's parameter list once at declaration time (instead of 
-  every instantiation)
+* parse a macro's parameter list once at declaration time (instead of every instantiation)
 * extended test_multiple_blocks() to check for both normal and reversed order
 * added unittest to increase code coverage
 * do not issue deprecation warning for <include> tags that are non-xacro
@@ -240,7 +281,7 @@ Changelog for package xacro
   <xacro:rename xacro:name="<new element name>"/>
 * moved unittests requiring --inorder processing to class TestXacroInorder
 * added unittest test_dynamic_macro_undefined()
-* improved error message when variable include filename is used 
+* improved error message when variable include filename is used
   without --inorder
 * stripped down unittest test_inorder_processing()
 * improved processing
@@ -424,9 +465,9 @@ Changelog for package xacro
   - allows for evaluation of standard math functions
   - other desired functions could be added in eval_self_contained
   - Values in Table symbols are not stored as strings but as typed values.
-* If text is required, a conversion with str() is performed, to ensure 
+* If text is required, a conversion with str() is performed, to ensure
   proper evaluation of expressions. Otherwise 3*"1" would evaluate to "111".
-* use __future__.division we can handle integer division evaluating to 
+* use __future__.division we can handle integer division evaluating to
   floating-point devision, as before
 * allow variable names for filename attribute in <xacro:include>
 * allow for ordered XML processing to avoid issues with multiply defined
@@ -434,7 +475,7 @@ Changelog for package xacro
   - enable the new behaviour by passing --inorder cmdline option
   - to improve code readibility and reusability, introduced functions
 * process_include(node), grab_macro(elt, macros), grab_property(elt, symbols)
-  containing 1:1 corresponding handling from process_includes, grab_macros, 
+  containing 1:1 corresponding handling from process_includes, grab_macros,
   and grab_properties
   - added corresponding test case test_inorder_processing()
 * dynamic macro names using <xacro:call macro=""/>
