@@ -41,8 +41,8 @@ import xml.dom.minidom
 from copy import deepcopy
 from .cli import process_args
 from .color import error, message, warning
-from .xmlutils import check_attrs, first_child_element, \
-    next_sibling_element, replace_node, reqd_attrs
+from .xmlutils import opt_attrs, reqd_attrs, first_child_element, \
+    next_sibling_element, replace_node
 
 
 # Dictionary of substitution args
@@ -84,9 +84,57 @@ def abs_filename_spec(filename_spec):
     return filename_spec
 
 
+class YamlListWrapper(list):
+    """Wrapper class for yaml lists to allow recursive inheritance of wrapper property"""
+    @staticmethod
+    def wrap(item):
+        """This static method, used by both YamlListWrapper and YamlDictWrapper,
+           dispatches to the correct wrapper class depending on the type of yaml item"""
+        if isinstance(item, dict):
+            return YamlDictWrapper(item)
+        elif isinstance(item, list):
+            return YamlListWrapper(item)
+        else: # scalar
+            return item
+
+    def __getitem__(self, idx):
+        return YamlListWrapper.wrap(super(YamlListWrapper, self).__getitem__(idx))
+
+
+class YamlDictWrapper(dict):
+    """Wrapper class providing dotted access to dict items"""
+    def __getattr__(self, item):
+        try:
+            return YamlListWrapper.wrap(super(YamlDictWrapper, self).__getitem__(item))
+        except KeyError:
+            raise XacroException("No such key: '{}'".format(item))
+
+    __getitem__ = __getattr__
+
+
+def construct_angle_radians(loader, node):
+    """utility function to construct radian values from yaml"""
+    value = loader.construct_scalar(node).strip()
+    try:
+        return float(eval(value, global_symbols))
+    except SyntaxError as e:
+        raise XacroException("invalid expression: %s" % value)
+
+
+def construct_angle_degrees(loader, node):
+    """utility function for converting degrees into radians from yaml"""
+    value = loader.construct_scalar(node)
+    try:
+        return math.radians(float(value))
+    except ValueError:
+        raise XacroException("invalid degree value: %s" % value)
+
+
 def load_yaml(filename):
     try:
         import yaml
+        yaml.SafeLoader.add_constructor(u'!radians', construct_angle_radians)
+        yaml.SafeLoader.add_constructor(u'!degrees', construct_angle_degrees)
     except Exception:
         raise XacroException("yaml support not available; install python-yaml")
 
@@ -94,7 +142,7 @@ def load_yaml(filename):
     f = open(filename)
     oldstack = push_file(filename)
     try:
-        return yaml.safe_load(f)
+        return YamlListWrapper.wrap(yaml.safe_load(f))
     finally:
         f.close()
         restore_filestack(oldstack)
@@ -111,8 +159,8 @@ global_symbols = {'__builtins__': {k: __builtins__[k] for k in
                                     'True', 'False', 'min', 'max', 'round']}}
 # also define all math symbols and functions
 global_symbols.update(math.__dict__)
-# expose load_yaml and abs_filename
-global_symbols.update(dict(load_yaml=load_yaml, abs_filename=abs_filename_spec))
+# expose load_yaml, abs_filename, and dotify
+global_symbols.update(dict(load_yaml=load_yaml, abs_filename=abs_filename_spec, dotify=YamlDictWrapper))
 
 
 class XacroException(Exception):
@@ -134,6 +182,24 @@ class XacroException(Exception):
 
 
 verbosity = 1
+
+def check_attrs(tag, required, optional):
+    """
+    Helper routine to fetch required and optional attributes
+    and complain about any additional attributes.
+    :param tag (xml.dom.Element): DOM element node
+    :param required [str]: list of required attributes
+    :param optional [str]: list of optional attributes
+    """
+    result = reqd_attrs(tag, required)
+    result.extend(opt_attrs(tag, optional))
+    allowed = required + optional
+    extra = [a for a in tag.attributes.keys() if a not in allowed and not a.startswith("xmlns:")]
+    if extra:
+        warning("%s: unknown attribute(s): %s" % (tag.nodeName, ', '.join(extra)))
+        if verbosity > 0:
+            print_location(filestack)
+    return result
 
 
 # deprecate non-namespaced use of xacro tags (issues #41, #59, #60)
@@ -191,14 +257,20 @@ def eval_extension(s):
         raise XacroException('package not found:', exc=e)
 
 
-class Table(object):
+class Table(dict):
     def __init__(self, parent=None):
+        dict.__init__(self)
+        if parent is None:
+            parent = dict()  # Use empty dict to simplify lookup
         self.parent = parent
-        self.table = {}
+        try:
+            self.root = parent.root  # short link to root dict / global_symbols
+            self.depth = self.parent.depth + 1  # for debugging only
+        except AttributeError:
+            self.root = parent
+            self.depth = 0
         self.unevaluated = set()  # set of unevaluated variables
         self.recursive = []  # list of currently resolved vars (to resolve recursive definitions)
-        # the following variables are for debugging / checking only
-        self.depth = self.parent.depth + 1 if self.parent else 0
 
     @staticmethod
     def _eval_literal(value):
@@ -206,8 +278,12 @@ class Table(object):
             # remove single quotes from escaped string
             if len(value) >= 2 and value[0] == "'" and value[-1] == "'":
                 return value[1:-1]
-            # try to evaluate as number literal or boolean
-            # this is needed to handle numbers in property definitions as numbers, not strings
+            # Try to evaluate as number literal or boolean.
+            # This is needed to handle numbers in property definitions as numbers, not strings.
+            # python3 ignores/drops underscores in number literals (due to PEP515).
+            # Here, we want to handle literals with underscores as plain strings.
+            if '_' in value:
+                return value
             for f in [int, float, lambda x: get_boolean_value(x, None)]:  # order of types is important!
                 try:
                     return f(value)
@@ -222,39 +298,37 @@ class Table(object):
                 raise XacroException("recursive variable definition: %s" %
                                      " -> ".join(self.recursive + [key]))
             self.recursive.append(key)
-            self.table[key] = self._eval_literal(eval_text(self.table[key], self))
+            dict.__setitem__(self, key, self._eval_literal(eval_text(dict.__getitem__(self, key), self)))
             self.unevaluated.remove(key)
             self.recursive.remove(key)
 
         # return evaluated result
-        value = self.table[key]
-        if (verbosity > 2 and self.parent is None) or verbosity > 3:
+        value = dict.__getitem__(self, key)
+        if (verbosity > 2 and self.parent is self.root) or verbosity > 3:
             print("{indent}use {key}: {value} ({loc})".format(
                 indent=self.depth * ' ', key=key, value=value, loc=filestack[-1]), file=sys.stderr)
         return value
 
     def __getitem__(self, key):
-        if key in self.table:
+        if dict.__contains__(self, key):
             return self._resolve_(key)
-        elif self.parent:
-            return self.parent[key]
         else:
-            raise KeyError(key)
+            return self.parent[key]
 
     def _setitem(self, key, value, unevaluated):
-        if key in global_symbols:
-            warning("redefining global property: %s" % key)
+        if key in self.root:
+            warning("redefining global symbol: %s" % key)
             print_location(filestack)
 
         value = self._eval_literal(value)
-        self.table[key] = value
+        dict.__setitem__(self, key, value)
         if unevaluated and isinstance(value, str):
             # literal evaluation failed: re-evaluate lazily at first access
             self.unevaluated.add(key)
         elif key in self.unevaluated:
             # all other types cannot be evaluated
             self.unevaluated.remove(key)
-        if (verbosity > 2 and self.parent is None) or verbosity > 3:
+        if (verbosity > 2 and self.parent is self.root) or verbosity > 3:
             print("{indent}set {key}: {value} ({loc})".format(
                 indent=self.depth * ' ', key=key, value=value, loc=filestack[-1]), file=sys.stderr)
 
@@ -263,19 +337,18 @@ class Table(object):
 
     def __contains__(self, key):
         return \
-            key in self.table or \
-            (self.parent and key in self.parent)
+            dict.__contains__(self, key) or (key in self.parent)
 
     def __str__(self):
-        s = str(self.table)
-        if isinstance(self.parent, Table):
+        s = dict.__str__(self)
+        if self.parent is not None:
             s += "\n  parent: "
             s += str(self.parent)
         return s
 
-    def root(self):
+    def top(self):
         p = self
-        while p.parent:
+        while p.parent is not p.root:
             p = p.parent
         return p
 
@@ -404,12 +477,18 @@ def process_include(elt, macros, symbols, func):
             namespace_spec = eval_text(namespace_spec, symbols)
             macros[namespace_spec] = ns_macros = MacroNameSpace()
             symbols[namespace_spec] = ns_symbols = PropertyNameSpace()
-            macros = ns_macros
-            symbols = ns_symbols
         except TypeError:
             raise XacroException('namespaces are supported with in-order option only')
+    else:
+        ns_macros = macros
+        ns_symbols = symbols
 
     optional = get_boolean_value(optional, None)
+
+    if first_child_element(elt):
+        warning("Child elements of a <xacro:include> tag are ignored")
+        if verbosity > 0:
+            print_location(filestack)
 
     for filename in get_include_files(filename_spec, symbols):
         try:
@@ -418,17 +497,16 @@ def process_include(elt, macros, symbols, func):
             include = parse(None, filename).documentElement
 
             # recursive call to func
-            func(include, macros, symbols)
+            func(include, ns_macros, ns_symbols)
             included.append(include)
             import_xml_namespaces(elt.parentNode, include.attributes)
+            # restore filestack
+            restore_filestack(oldstack)
         except XacroException as e:
             if e.exc and isinstance(e.exc, IOError) and optional is True:
                 continue
             else:
                 raise
-        finally:
-            # restore filestack
-            restore_filestack(oldstack)
 
     remove_previous_comments(elt)
     # replace the include tag with the nodes of the included file(s)
@@ -539,10 +617,10 @@ def grab_property(elt, table):
     replace_node(elt, by=None)
 
     if scope and scope == 'global':
-        target_table = table.root()
+        target_table = table.top()
         unevaluated = False
     elif scope and scope == 'parent':
-        if table.parent:
+        if table.parent is not None:
             target_table = table.parent
             unevaluated = False
         else:
@@ -568,7 +646,7 @@ LEXER = QuickLexer(DOLLAR_DOLLAR_BRACE=r"^\$\$+(\{|\()",  # multiple $ in a row,
 def eval_text(text, symbols):
     def handle_expr(s):
         try:
-            return eval(eval_text(s, symbols), global_symbols, symbols)
+            return eval(eval_text(s, symbols), symbols)
         except Exception as e:
             # re-raise as XacroException to add more context
             raise XacroException(exc=e,
@@ -668,13 +746,14 @@ def handle_macro_call(node, macros, symbols):
         return False  # no macro
 
     # Expand the macro
-    scoped = Table(symbols)  # new local name space for macro evaluation
+    scoped_symbols = Table(symbols)  # new local name space for macro evaluation
+    scoped_macros = Table(macros)
     params = m.params[:]  # deep copy macro's params list
     for name, value in node.attributes.items():
         if name not in params:
             raise XacroException("Invalid parameter '%s'" % str(name), macro=m)
         params.remove(name)
-        scoped._setitem(name, eval_text(value, symbols), unevaluated=False)
+        scoped_symbols._setitem(name, eval_text(value, symbols), unevaluated=False)
         node.setAttribute(name, "")  # suppress second evaluation in eval_all()
 
     # Evaluate block parameters in node
@@ -687,7 +766,7 @@ def handle_macro_call(node, macros, symbols):
             if not block:
                 raise XacroException("Not enough blocks", macro=m)
             params.remove(param)
-            scoped[param] = block
+            scoped_symbols[param] = block
             block = next_sibling_element(block)
 
     if block is not None:
@@ -702,14 +781,14 @@ def handle_macro_call(node, macros, symbols):
         # get default
         name, default = m.defaultmap.get(param, (None, None))
         if name is not None or default is not None:
-            scoped._setitem(param, eval_default_arg(name, default, symbols, m), unevaluated=False)
+            scoped_symbols._setitem(param, eval_default_arg(name, default, symbols, m), unevaluated=False)
             params.remove(param)
 
     if params:
         raise XacroException("Undefined parameters [%s]" % ",".join(params), macro=m)
 
     try:
-        eval_all(body, macros, scoped)
+        eval_all(body, scoped_macros, scoped_symbols)
     except Exception as e:
         # fill in macro call history for nice error reporting
         if hasattr(e, 'macros'):
@@ -928,8 +1007,8 @@ def process_doc(doc, mappings=None, xacro_ns=True, **kwargs):
     if not filestack:
         restore_filestack([None])
 
-    macros = {}
-    symbols = Table()
+    macros = Table()
+    symbols = Table(global_symbols)
 
     # apply xacro:targetNamespace as global xmlns (if defined)
     targetNS = doc.documentElement.getAttribute('xacro:targetNamespace')
