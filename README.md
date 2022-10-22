@@ -1,3 +1,26 @@
+## xacro (rolling) - 2.0.8-1
+
+The packages in the `xacro` repository were released into the `rolling` distro by running `/usr/bin/bloom-release --ros-distro rolling xacro` on `Sat, 22 Oct 2022 21:43:16 -0000`
+
+The `xacro` package was released.
+
+Version of package(s) in repository `xacro`:
+
+- upstream repository: https://github.com/ros/xacro.git
+- release repository: https://github.com/ros2-gbp/xacro-release.git
+- rosdistro version: `2.0.7-2`
+- old version: `2.0.7-2`
+- new version: `2.0.8-1`
+
+Versions of tools used:
+
+- bloom version: `0.11.2`
+- catkin_pkg version: `0.5.2`
+- rosdep version: `0.22.1`
+- rosdistro version: `0.9.0`
+- vcstools version: `0.1.42`
+
+
 ## xacro (rolling) - 2.0.7-1
 
 The packages in the `xacro` repository were released into the `rolling` distro by running `/usr/bin/bloom-release --ros-distro rolling xacro --override-release-repository-url https://github.com/ros2-gbp/xacro-release.git` on `Fri, 03 Sep 2021 22:50:56 -0000`
