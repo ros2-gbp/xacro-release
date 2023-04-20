@@ -1,0 +1,13 @@
+Source: ros-iron-xacro
+Section: misc
+Priority: optional
+Maintainer: Robert Haschke <rhaschke@techfak.uni-bielefeld.de>
+Build-Depends: debhelper (>= 9.0.0), python3-yaml, ros-iron-ament-cmake, ros-iron-ament-cmake-pytest <!nocheck>, ros-iron-ament-cmake-python, ros-iron-ament-index-python, ros-iron-ament-lint-auto <!nocheck>, ros-iron-ros-workspace
+Homepage: http://ros.org/wiki/xacro
+Standards-Version: 3.9.2
+
+Package: ros-iron-xacro
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3-yaml, ros-iron-ament-index-python, ros-iron-ros-workspace
+Description: Xacro (XML Macros) Xacro is an XML macro language.
+ With xacro, you can construct shorter and more readable XML files by using macros that expand to larger XML expressions.
