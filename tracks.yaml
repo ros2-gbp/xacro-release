@@ -381,5 +381,4 @@ tracks:
     ros_distro: rolling
     vcs_type: git
     vcs_uri: https://github.com/ros/xacro.git
-    version: 2.0.10
-    version_saved: :{auto}
+    version: :{auto}
