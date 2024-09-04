@@ -31,6 +31,8 @@
 # Maintainer: Morgan Quigley <morgan@osrfoundation.org>
 
 import ast
+import collections
+import enum
 import glob
 import math
 import os
@@ -99,31 +101,38 @@ class YamlDictWrapper(dict):
     def __getattr__(self, item):
         try:
             return YamlListWrapper.wrap(super(YamlDictWrapper, self).__getitem__(item))
-        except KeyError:
-            raise XacroException("No such key: '{}'".format(item))
+        except KeyError:  # raise AttributeError instead to support hasattr()
+            raise AttributeError("The yaml dictionary has no key '{}'".format(item))
 
     __getitem__ = __getattr__
 
 
-def construct_angle_radians(loader, node):
-    """utility function to construct radian values from yaml"""
-    value = loader.construct_scalar(node)
-    try:
-        return float(safe_eval(value, _global_symbols))
-    except SyntaxError:
-        raise XacroException("invalid expression: %s" % value)
+class ConstructUnits(enum.Enum):
+    """utility enumeration to construct a values with a unit from yaml"""
+    __ConstructUnitsValue = collections.namedtuple('__ConstructUnitsValue', ['tag', 'conversion_constant'])
+    # Angles [base: radians]
+    angle_radians    = __ConstructUnitsValue(u'!radians', 1.0)
+    angle_degrees    = __ConstructUnitsValue(u'!degrees', math.pi/180.0)
+    # Length [base: meters]
+    length_meters      = __ConstructUnitsValue(u'!meters', 1.0)
+    length_millimeters = __ConstructUnitsValue(u'!millimeters', 0.001)
+    length_foot        = __ConstructUnitsValue(u'!foot', 0.3048)
+    length_inches      = __ConstructUnitsValue(u'!inches', 0.0254)
 
-
-def construct_angle_degrees(loader, node):
-    """utility function for converting degrees into radians from yaml"""
-    return math.radians(construct_angle_radians(loader, node))
+    def constructor(self, loader, node):
+        """utility function to construct a values with a unit from yaml"""
+        value = loader.construct_scalar(node)
+        try:
+            return float(safe_eval(value, _global_symbols))*self.value.conversion_constant
+        except SyntaxError:
+            raise XacroException("invalid expression: %s" % value)
 
 
 def load_yaml(filename):
     try:
         import yaml
-        yaml.SafeLoader.add_constructor(u'!radians', construct_angle_radians)
-        yaml.SafeLoader.add_constructor(u'!degrees', construct_angle_degrees)
+        for unit in ConstructUnits:
+            yaml.SafeLoader.add_constructor(unit.value.tag, unit.constructor)
     except Exception:
         raise XacroException("yaml support not available; install python-yaml")
 
@@ -193,7 +202,7 @@ def create_global_symbols():
     expose('sorted', 'range', source=__builtins__, ns='python', deprecate_msg=deprecate_msg)
     # Expose all builtin symbols into the python namespace. Thus the stay accessible if the global symbol was overriden
     expose('list', 'dict', 'map', 'len', 'str', 'float', 'int', 'True', 'False', 'min', 'max', 'round',
-           'all', 'any', 'complex', 'divmod', 'enumerate', 'filter', 'frozenset', 'hash', 'isinstance', 'issubclass',
+           'abs', 'all', 'any', 'complex', 'divmod', 'enumerate', 'filter', 'frozenset', 'hash', 'isinstance', 'issubclass',
            'ord', 'repr', 'reversed', 'slice', 'set', 'sum', 'tuple', 'type', 'zip', source=__builtins__, ns='python')
 
     # Expose all math symbols and functions into namespace math (and directly for backwards compatibility -- w/o deprecation)
@@ -285,14 +294,14 @@ def eval_extension(s):
     if s == '$(cwd)':
         return os.getcwd()
     try:
-        from .substitution_args import resolve_args, ArgException, PackageNotFoundError
+        from .substitution_args import resolve_args, ArgException
         return resolve_args(s, context=substitution_args_context)
     except ImportError as e:
         raise XacroException("substitution args not supported: ", exc=e)
     except ArgException as e:
         raise XacroException("Undefined substitution argument", exc=e)
-    except PackageNotFoundError as e:
-        raise XacroException("package not found:", exc=e)
+    except Exception as e:
+        raise XacroException(f"{type(e)}: {e}", exc=e)
 
 
 class Table(dict):
@@ -555,8 +564,8 @@ def is_valid_name(name):
     return False
 
 
-default_value = '''\$\{.*?\}|\$\(.*?\)|(?:'.*?'|\".*?\"|[^\s'\"]+)+|'''
-re_macro_arg = re.compile(r'^\s*([^\s:=]+?)\s*:?=\s*(\^\|?)?(' + default_value + ')(?:\s+|$)(.*)')
+default_value = r'''\$\{.*?\}|\$\(.*?\)|(?:'.*?'|\".*?\"|[^\s'\"]+)+|'''
+re_macro_arg = re.compile(r'^\s*([^\s:=]+?)\s*:?=\s*(\^\|?)?(' + default_value + r')(?:\s+|$)(.*)')
 #                          space(   param )(   :=  )(  ^|  )(        default      )( space )(rest)
 
 
