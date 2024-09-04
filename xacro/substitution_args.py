@@ -41,7 +41,6 @@ import math
 import os
 import yaml
 
-from ament_index_python.packages import get_package_share_directory, PackageNotFoundError
 from io import StringIO
 
 
@@ -138,6 +137,7 @@ def _dirname(resolved, a, args, context):
 
 
 def _eval_find(pkg):
+    from ament_index_python.packages import get_package_share_directory
     return get_package_share_directory(pkg)
 
 
@@ -320,6 +320,11 @@ def resolve_args(arg_str, context=None, filename=None):
         'find': _find,
     }
     resolved = _resolve_args(arg_str, context, commands)
+    # then resolve 'find' as it requires the subsequent path to be expanded already
+    commands = {
+        "find": _find,
+    }
+    resolved = _resolve_args(resolved, context, commands)
     return resolved
 
 
