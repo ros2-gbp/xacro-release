@@ -2,6 +2,39 @@
 Changelog for package xacro
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.0.13 (2025-03-20)
+-------------------
+* Pass AMENT_PREFIX_PATH to xacro (`#359 <https://github.com/ros/xacro/issues/359>`_)
+* Add Bazel build rules (`#350 <https://github.com/ros/xacro/issues/350>`_)
+* Contributors: Michael Carroll, Robert Haschke, Sean Fish
+
+2.0.12 (2025-01-08)
+-------------------
+* Handle new argument 'attr' in xml.dom.minidom._write_data() of Python 3.13 (`#353 <https://github.com/ros/xacro/issues/353>`_)
+* pyproject.toml: Automatically determine version from git
+* Add function python.vars() (`#348 <https://github.com/ros/xacro/issues/348>`_)
+* Contributors: Robert Haschke
+
+2.0.11 (2024-04-02)
+-------------------
+* Allow substitution args without ROS (`#340 <https://github.com/ros/xacro/issues/340>`_)
+* Add more unit tags for yaml files  (`#331 <https://github.com/ros/xacro/issues/331>`_)
+* Resolve $(find ...) as a result of a substitution argument (`#339 <https://github.com/ros/xacro/issues/339>`_)
+* Mark regexes as raw strings (`#336 <https://github.com/ros/xacro/issues/336>`_)
+* Add pyproject.toml for direct installation via pip (`#329 <https://github.com/ros/xacro/issues/329>`_)
+* Contributors: Adam Heins, Bruno-Pier, Carlo Rizzardo, Lukas Huber, Robert Haschke
+
+2.0.10 (2024-01-25)
+-------------------
+* Expose python.abs()
+* Fix hasattr support of YamlDictWrapper (`#324 <https://github.com/ros/xacro/issues/324>`_)
+* Contributors: Robert Haschke
+
+2.0.9 (2023-02-27)
+------------------
+* Evaluate ``arg`` value as str/unicode (`#322 <https://github.com/ros/xacro/issues/322>`_)
+* Contributors: Robert Haschke
+
 2.0.8 (2022-10-22)
 ------------------
 * Install xacro using console_script entrypoint (`#304 <https://github.com/ros/xacro/issues/304>`_)
