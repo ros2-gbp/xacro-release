@@ -57,6 +57,20 @@ except ImportError:
     def subTest(msg):
         yield None
 
+try:
+    # Determine if we are running the test under bazel and switch to runfiles directory
+    from python.runfiles import runfiles
+
+    data_path = runfiles.Create().Rlocation("_main/test")
+    os.chdir(data_path)
+
+    # Set the executable path
+    XACRO_EXECUTABLE = runfiles.Create().Rlocation("_main/xacro_main")
+    BAZEL_TEST = True
+except ImportError:
+    XACRO_EXECUTABLE = 'xacro'
+    BAZEL_TEST = False
+
 # regex to match whitespace
 whitespace = re.compile(r'\s+')
 
@@ -383,7 +397,7 @@ class TestXacroBase(unittest.TestCase):
 
     def run_xacro(self, input_path, *args):
         args = list(args)
-        subprocess.call(['xacro', input_path] + args)
+        subprocess.call([XACRO_EXECUTABLE, input_path] + args)
 
 
 # class to match XML docs while ignoring any comments
@@ -392,6 +406,7 @@ class TestXacroCommentsIgnored(TestXacroBase):
         super(TestXacroCommentsIgnored, self).__init__(*args, **kwargs)
         self.ignore_nodes = [xml.dom.Node.COMMENT_NODE]
 
+    @unittest.skipIf(BAZEL_TEST, "Bazel build does not support $(find pkg)")
     def test_pr2(self):
         # run xacro on the pr2 tree snapshot
         test_dir = os.path.abspath(os.path.dirname(__file__))
@@ -551,6 +566,7 @@ class TestXacro(TestXacroCommentsIgnored):
         src = '''<a><f v="${0.9 / 2 - 0.2}" /></a>'''
         self.assert_matches(self.quick_xacro(src), '''<a><f v="0.25" /></a>''')
 
+    @unittest.skipIf(BAZEL_TEST, "Bazel build does not support $(find pkg)")
     def test_substitution_args_find(self):
         resolved = self.quick_xacro('''<a>$(find xacro)/test/test_xacro.py</a>''').firstChild.firstChild.data
         self.assertEqual(os.path.realpath(resolved), os.path.realpath(__file__))
@@ -1125,6 +1141,46 @@ class TestXacro(TestXacroCommentsIgnored):
 
         self.assertTrue(output_file_created)
 
+    def test_set_root_directory(self):
+        # Run xacro in one directory, but specify the directory to resolve
+        # filenames in.
+        tmp_dir_name = tempfile.mkdtemp()  # create directory we can trash
+
+        output_path = os.path.join(tmp_dir_name, "out")
+
+        # Generate a pair of files to be parsed by xacro, outside of the
+        # test directory, to ensure the root-dir argument works
+        file_foo = os.path.join(tmp_dir_name, 'foo.xml.xacro')
+        file_bar = os.path.join(tmp_dir_name, 'bar.xml.xacro')
+        with open(file_foo, 'w') as f:
+            f.write('''<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+	<xacro:include filename="bar.xml.xacro"/>
+</robot>
+''')
+        with open(file_bar, 'w') as f:
+            f.write('''<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+    <link name="my_link"/>
+</robot>
+''')
+
+        # Run xacro with no --root-dir arg, which will then use the
+        # current path as the path to resolveto
+        self.run_xacro('foo.xml.xacro', '-o', output_path)
+        output_file_created = os.path.isfile(output_path)
+        self.assertFalse(output_file_created)
+
+        # Run xacro with --root-dir arg set to the new temp directory
+        self.run_xacro('foo.xml.xacro',
+                       '--root-dir', tmp_dir_name,
+                       '-o', output_path)
+
+        output_file_created = os.path.isfile(output_path)
+        shutil.rmtree(tmp_dir_name)  # clean up after ourselves
+
+        self.assertTrue(output_file_created)
+
     def test_iterable_literals_plain(self):
         self.assert_matches(self.quick_xacro('''
 <a xmlns:xacro="http://www.ros.org/wiki/xacro">
@@ -1488,9 +1544,9 @@ included from: string
         src = '''
 <a xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:property name="values" value="${xacro.load_yaml('constructors.yaml')}"/>
-  <values a="${values.a}" b="${values.b}" c="${values.c}"/>
+  <values no_tag="${values.no_tag}" angles="${values.angles}" lengths="${values.lengths}"/>
 </a>'''
-        res = '''<a><values a="{}" b="{}" c="42"/></a>'''.format(math.pi, 0.5*math.pi)
+        res = '''<a><values no_tag="42" angles="{}" lengths="{}"/></a>'''.format([math.pi]*2, [25.0]*4)
         self.assert_matches(self.quick_xacro(src), res)
 
     def test_yaml_custom_constructors_illegal_expr(self):
@@ -1501,6 +1557,11 @@ included from: string
   <values a="${{values.a}}" />
 </a>'''
         self.assertRaises(xacro.XacroException, self.quick_xacro, src.format(file=file))
+
+    def test_yaml_hasattr_support(self):
+        yaml = xacro.load_yaml('settings.yaml')
+        self.assertTrue(hasattr(yaml, 'arms'))
+        self.assertFalse(hasattr(yaml, 'this_key_does_not_exist'))
 
     def test_xacro_exist_required(self):
         src = '''
