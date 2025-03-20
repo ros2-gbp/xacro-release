@@ -55,6 +55,10 @@ substitution_args_context = {}
 filestack = None
 macrostack = None
 
+# Allow the user to override the root directory that relative
+# paths will be resolved to
+root_dir = os.curdir
+
 
 def init_stacks(file):
     global filestack
@@ -203,7 +207,7 @@ def create_global_symbols():
     # Expose all builtin symbols into the python namespace. Thus the stay accessible if the global symbol was overriden
     expose('list', 'dict', 'map', 'len', 'str', 'float', 'int', 'True', 'False', 'min', 'max', 'round',
            'abs', 'all', 'any', 'complex', 'divmod', 'enumerate', 'filter', 'frozenset', 'hash', 'isinstance', 'issubclass',
-           'ord', 'repr', 'reversed', 'slice', 'set', 'sum', 'tuple', 'type', 'zip', source=__builtins__, ns='python')
+           'ord', 'repr', 'reversed', 'slice', 'set', 'sum', 'tuple', 'type', 'vars', 'zip', source=__builtins__, ns='python')
 
     # Expose all math symbols and functions into namespace math (and directly for backwards compatibility -- w/o deprecation)
     expose([(k, v) for k, v in math.__dict__.items() if not k.startswith('_')], ns='math', deprecate_msg='')
@@ -292,7 +296,9 @@ class Macro(object):
 
 def eval_extension(s):
     if s == '$(cwd)':
-        return os.getcwd()
+        # In the case that root_dir is '.' this will expand to the full
+        # current working directory, identical to os.getcwd()
+        return os.path.abspath(root_dir)
     try:
         from .substitution_args import resolve_args, ArgException
         return resolve_args(s, context=substitution_args_context)
@@ -1018,7 +1024,7 @@ def parse(inp, filename=None):
     f = None
     if inp is None:
         try:
-            inp = f = open(filename)
+            inp = f = open(os.path.join(root_dir, filename))
         except IOError as e:
             # do not report currently processed file as "in file ..."
             filestack.pop()
@@ -1123,6 +1129,10 @@ _global_symbols = create_global_symbols()
 
 
 def _process(input_file_name, opts):
+    if 'root_dir' in opts and opts['root_dir']:
+        global root_dir
+        root_dir = opts['root_dir']
+
     try:
         # open and process file
         doc = process_file(input_file_name, **opts)
