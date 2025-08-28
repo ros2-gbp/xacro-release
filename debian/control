@@ -1,0 +1,13 @@
+Source: ros-kilted-xacro
+Section: misc
+Priority: optional
+Maintainer: Robert Haschke <rhaschke@techfak.uni-bielefeld.de>
+Build-Depends: debhelper (>= 9.0.0), python3-yaml, ros-kilted-ament-cmake, ros-kilted-ament-cmake-pytest <!nocheck>, ros-kilted-ament-cmake-python, ros-kilted-ament-index-python, ros-kilted-ament-lint-auto <!nocheck>, ros-kilted-ros-workspace
+Homepage: http://ros.org/wiki/xacro
+Standards-Version: 3.9.2
+
+Package: ros-kilted-xacro
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3-yaml, ros-kilted-ament-index-python, ros-kilted-ros-workspace
+Description: Xacro (XML Macros) Xacro is an XML macro language.
+ With xacro, you can construct shorter and more readable XML files by using macros that expand to larger XML expressions.
