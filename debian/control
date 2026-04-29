@@ -1,0 +1,13 @@
+Source: ros-lyrical-xacro
+Section: misc
+Priority: optional
+Maintainer: Robert Haschke <rhaschke@techfak.uni-bielefeld.de>
+Build-Depends: debhelper (>= 9.0.0), python3-yaml, ros-lyrical-ament-cmake, ros-lyrical-ament-cmake-pytest <!nocheck>, ros-lyrical-ament-cmake-python, ros-lyrical-ament-index-python, ros-lyrical-ament-lint-auto <!nocheck>, ros-lyrical-ros-workspace
+Homepage: http://ros.org/wiki/xacro
+Standards-Version: 3.9.2
+
+Package: ros-lyrical-xacro
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, python3-yaml, ros-lyrical-ament-index-python, ros-lyrical-ros-workspace
+Description: Xacro (XML Macros) Xacro is an XML macro language.
+ With xacro, you can construct shorter and more readable XML files by using macros that expand to larger XML expressions.
